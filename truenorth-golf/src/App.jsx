@@ -1,4 +1,5 @@
 import React, { useState, useRef, useEffect } from "react";
+import RulesPage from "./Rules";
 import TournamentHistory from "./History";
 import SeasonStandings from "./Season";
 import HandicapTracker from "./Handicap";
@@ -167,9 +168,9 @@ function AdminView({ course, players, adminUnlocked, setAdminUnlocked, pinInput,
       if (ratingRef.current) ratingRef.current.value = localCourse.rating || "";
       if (descRef.current)   descRef.current.value   = localCourse.description || "";
       const par   = localCourse.par   || DEFAULT_PAR;
-      const yards = localCourse.yards || DEFAULT_YARDS;
-      parRefs.current.forEach((ref, i)   => { if (ref.current) ref.current.value = par[i]   || 4; });
-      yardsRefs.current.forEach((ref, i) => { if (ref.current) ref.current.value = yards[i] || 400; });
+      const yards = localCourse.yards;
+      parRefs.current.forEach((ref, i)   => { if (ref.current) ref.current.value = par[i] || 4; });
+      yardsRefs.current.forEach((ref, i) => { if (ref.current) ref.current.value = (yards && yards[i]) ? yards[i] : ""; });
     }, [courseKey]);
 
     const collectAndSave = async () => {
@@ -235,7 +236,13 @@ function AdminView({ course, players, adminUnlocked, setAdminUnlocked, pinInput,
             {/* Course search */}
             <div style={{gridColumn:"1/-1"}}>
               <div style={{fontSize:10,color:"var(--text3)",letterSpacing:1,marginBottom:4}}>SEARCH MINNESOTA COURSES</div>
-              <CourseSearch onSelect={c=>{ setLocalCourse(prev=>({...prev,name:c.name,city:c.city,slope:c.slope,rating:c.rating,par:c.par||DEFAULT_PAR,yards:c.yards||DEFAULT_YARDS})); setCourseKey(k=>k+1); }}/>
+              <CourseSearch onSelect={c=>{
+                setLocalCourse(prev=>({...prev,name:c.name,city:c.city,slope:c.slope,rating:c.rating,
+                  par:DEFAULT_PAR,
+                  yards:Array(18).fill(""),
+                }));
+                setCourseKey(k=>k+1);
+              }}/>
             </div>
             {[["Course Name","name",nameRef],["City / State","city",cityRef],["Slope Rating","slope",slopeRef],["Course Rating","rating",ratingRef]].map(([lbl,key,ref])=>(
               <div key={key}>
@@ -1034,7 +1041,7 @@ export default function App() {
   // ══════════════════════════════════════════════════════════════════════════
   // ROOT RENDER
   const NAV = [
-    ["leaderboard","🏆 LEADERBOARD"],["history","📖 HISTORY"],["season","🌟 STANDINGS"],["scorecard","📋 SCORECARDS"],
+    ["leaderboard","🏆 LEADERBOARD"],["history","📖 HISTORY"],["rules","📋 RULES"],["season","🌟 STANDINGS"],["scorecard","📋 SCORECARDS"],
     ["course","🗺 COURSE"],["register","✍ REGISTER"],
     ["my-scores-login","✏️ MY SCORES"],["handicap","🏅 HANDICAPS"],["admin","⚙ ADMIN"],
   ];
@@ -1096,6 +1103,7 @@ export default function App() {
         {screen==="my-scores-login" && <MyScoresLogin/>}
         {screen==="my-scores"       && <MyScores/>}
         {screen==="history" && <TournamentHistory players={players} />}
+        {screen==="rules" && <RulesPage adminUnlocked={adminUnlocked} />}
         {screen==="season" && <SeasonStandings players={players} adminUnlocked={adminUnlocked} />}
         {screen==="handicap" && <HandicapTracker players={players} adminUnlocked={adminUnlocked} onHandicapUpdate={(pid,hcp)=>setPlayers(prev=>prev.map(p=>p.id===pid?{...p,handicap:hcp}:p))} />}
         {screen==="admin" && <AdminView
