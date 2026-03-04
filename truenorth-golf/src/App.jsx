@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect } from "react";
+import React, { useState, useRef, useEffect } from "react";
 import SeasonStandings from "./Season";
 import HandicapTracker from "./Handicap";
 import { searchCourses } from "./mnCourses";
@@ -142,20 +142,148 @@ button{cursor:pointer;font-family:'Bebas Neue',sans-serif;letter-spacing:1.5px;b
 `;
 
 // ═════════════════════════════════════════════════════════════════════════════
-// ── Course Search Component
-function CourseSearch({ onSelect }) {
-  const [query, setQuery] = React.useState("");
-  const [results, setResults] = React.useState([]);
-  const [open, setOpen] = React.useState(false);
+// ── AdminView as standalone component to prevent remount on parent re-render
+function AdminView({ course, players, adminUnlocked, setAdminUnlocked, pinInput, setPinInput,
+  pinError, setPinError, savePlayer, removePlayerDb, saveCourse, setCourse, updateField, notify }) {
+    const [localCourse, setLocalCourse] = useState(course || {});
+    const [saving, setSaving] = useState(false);
 
-  React.useEffect(() => {
-    if (query.length >= 2) {
-      setResults(searchCourses(query));
-      setOpen(true);
-    } else {
-      setResults([]);
-      setOpen(false);
-    }
+    const saveAll = async () => {
+      setSaving(true);
+      await saveCourse(localCourse);
+      setCourse(localCourse);
+      setSaving(false);
+      notify("Course saved!");
+  
+    if (!adminUnlocked) return (
+      <div className="fade-up" style={{maxWidth:340,margin:"0 auto",textAlign:"center"}}>
+        <div style={{fontFamily:"'Bebas Neue'",fontSize:12,letterSpacing:4,color:"var(--green)",marginBottom:10}}>COMMISSIONER ACCESS</div>
+        <h2 style={{fontFamily:"'Bebas Neue'",fontSize:28,marginBottom:24}}>ADMIN LOGIN</h2>
+        <div className="card" style={{padding:28}}>
+          <div className="section-label" style={{textAlign:"left"}}>PIN</div>
+          <input type="password" value={pinInput} onChange={e=>setPinInput(e.target.value)}
+            onKeyDown={e=>{ if(e.key==="Enter"){ if(pinInput===ADMIN_PIN)setAdminUnlocked(true); else setPinError(true); }}}
+            placeholder="••••" style={{width:"100%",fontSize:24,letterSpacing:8,textAlign:"center",marginBottom:10}}/>
+          {pinError && <div style={{color:"var(--red)",fontSize:13,marginBottom:10}}>Incorrect PIN.</div>}
+          <button className="btn-gold" style={{width:"100%"}}
+            onClick={()=>{ if(pinInput===ADMIN_PIN){setAdminUnlocked(true);setPinError(false);}else setPinError(true); }}>
+            UNLOCK
+          </button>
+          <div style={{fontSize:11,color:"var(--text3)",marginTop:12}}>Default PIN: 1234</div>
+        </div>
+      </div>
+    );
+
+    return (
+      <div className="fade-up">
+        {/* Join code banner */}
+        <div style={{marginBottom:24,padding:"16px 20px",background:"var(--bg3)",border:"1px solid var(--border2)",borderRadius:6,display:"flex",alignItems:"center",justifyContent:"space-between",flexWrap:"wrap",gap:12}}>
+          <div>
+            <div className="section-label" style={{marginBottom:2}}>PLAYER JOIN CODE — SHARE THIS</div>
+            <div style={{fontFamily:"'Bebas Neue'",fontSize:30,letterSpacing:5,color:"var(--gold)"}}>{JOIN_CODE}</div>
+          </div>
+          <div style={{fontSize:13,color:"var(--text3)",maxWidth:280}}>Players enter this on the Register screen to join the tournament and enter scores from their phones.</div>
+        </div>
+
+        {/* Course settings */}
+        <div className="section-label">── COURSE SETTINGS</div>
+        <div className="card" style={{padding:20,marginBottom:24}}>
+          <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:12,marginBottom:12}}>
+            {/* Course search */}
+            <div style={{gridColumn:"1/-1"}}>
+              <div style={{fontSize:10,color:"var(--text3)",letterSpacing:1,marginBottom:4}}>SEARCH MINNESOTA COURSES</div>
+              <CourseSearch onSelect={c=>setLocalCourse(prev=>({...prev,name:c.name,city:c.city,slope:c.slope,rating:c.rating,par:c.par||DEFAULT_PAR}))}/>
+            </div>
+            {[["Course Name","name"],["City / State","city"],["Slope Rating","slope"],["Course Rating","rating"]].map(([lbl,key])=>(
+              <div key={key}>
+                <div style={{fontSize:10,color:"var(--text3)",letterSpacing:1,marginBottom:4}}>{lbl.toUpperCase()}</div>
+                <input defaultValue={localCourse[key]??""} key={"course-"+key} type={key==="slope"||key==="rating"?"number":"text"}
+                  step={key==="rating"?".1":undefined}
+                  onBlur={e=>setLocalCourse(c=>({...c,[key]:key==="slope"?parseInt(e.target.value)||0:key==="rating"?parseFloat(e.target.value)||0:e.target.value}))}
+                  style={{width:"100%"}}/>
+              </div>
+            ))}
+          </div>
+
+          {/* Par per hole */}
+          <div style={{marginBottom:12}}>
+            <div style={{fontSize:10,color:"var(--text3)",letterSpacing:1,marginBottom:8}}>PAR PER HOLE (1–18)</div>
+            <div style={{display:"flex",flexWrap:"wrap",gap:6}}>
+              {Array.from({length:18},(_,i)=>(
+                <div key={i} style={{textAlign:"center"}}>
+                  <div style={{fontSize:9,color:"var(--text3)",marginBottom:2}}>{i+1}</div>
+                  <input type="number" min="3" max="6" defaultValue={(localCourse.par||DEFAULT_PAR)[i]}
+                    key={"par-"+i}
+                    onBlur={e=>{ const p=[...(localCourse.par||DEFAULT_PAR)]; p[i]=parseInt(e.target.value)||4; setLocalCourse(c=>({...c,par:p})); }}
+                    style={{width:40,textAlign:"center",padding:"4px 2px"}}/>
+                </div>
+              ))}
+            </div>
+          </div>
+
+          {/* Yardage per hole */}
+          <div style={{marginBottom:16}}>
+            <div style={{fontSize:10,color:"var(--text3)",letterSpacing:1,marginBottom:8}}>YARDAGE PER HOLE (1–18)</div>
+            <div style={{display:"flex",flexWrap:"wrap",gap:6}}>
+              {Array.from({length:18},(_,i)=>(
+                <div key={i} style={{textAlign:"center"}}>
+                  <div style={{fontSize:9,color:"var(--text3)",marginBottom:2}}>{i+1}</div>
+                  <input type="number" min="100" max="700" defaultValue={(localCourse.yards||DEFAULT_YARDS)[i]}
+                    key={"yard-"+i}
+                    onBlur={e=>{ const y=[...(localCourse.yards||DEFAULT_YARDS)]; y[i]=parseInt(e.target.value)||400; setLocalCourse(c=>({...c,yards:y})); }}
+                    style={{width:52,textAlign:"center",padding:"4px 2px"}}/>
+                </div>
+              ))}
+            </div>
+          </div>
+
+          <div style={{marginBottom:16}}>
+            <div style={{fontSize:10,color:"var(--text3)",letterSpacing:1,marginBottom:4}}>DESCRIPTION</div>
+            <textarea defaultValue={localCourse.description??""} key="course-desc" onBlur={e=>setLocalCourse(c=>({...c,description:e.target.value}))} rows={3} style={{width:"100%",resize:"vertical"}}/>
+          </div>
+
+          <button className="btn-gold" onClick={saveAll} disabled={saving} style={{fontSize:13}}>
+            {saving?"SAVING…":"SAVE COURSE CHANGES"}
+          </button>
+        </div>
+
+        {/* Players */}
+        <div className="section-label">── PLAYER ROSTER ({players.length} players)</div>
+        <div className="card" style={{overflow:"hidden",marginBottom:12}}>
+          <div style={{display:"grid",gridTemplateColumns:"1fr 80px 150px 90px",background:"var(--bg3)",padding:"9px 16px",fontSize:10,letterSpacing:2,color:"var(--text3)",fontFamily:"'Bebas Neue'"}}>
+            <span>NAME</span><span>HCP</span><span>FLIGHT</span><span></span>
+          </div>
+          {players.map(p=>(
+            <div key={p.id} style={{display:"grid",gridTemplateColumns:"1fr 80px 150px 90px",padding:"10px 16px",borderBottom:"1px solid var(--border)",alignItems:"center",gap:8}}>
+              <input defaultValue={p.name} key={p.id+"-name"} onBlur={e=>updateField(p.id,"name",e.target.value)} style={{width:"100%",padding:"5px 8px"}}/>
+              <input type="number" defaultValue={p.handicap} key={p.id+"-hcp"} onBlur={e=>updateField(p.id,"handicap",e.target.value)} min="0" max="54" style={{width:65}}/>
+              <select value={p.flight} onChange={e=>updateField(p.id,"flight",e.target.value)} style={{width:"100%"}}>
+                {FLIGHTS.map(f=><option key={f}>{f}</option>)}
+              </select>
+              <button className="btn-danger" onClick={()=>removePlayerDb(p.id)}>✕ Remove</button>
+            </div>
+          ))}
+          {players.length===0 && <div style={{padding:24,textAlign:"center",color:"var(--text3)",fontSize:13}}>No players yet. They'll appear here once they register.</div>}
+        </div>
+        <button className="btn-gold" style={{fontSize:13}} onClick={async()=>{
+          const np={id:`player-${Date.now()}`,name:"New Player",handicap:0,flight:"A Flight",scores:Array(18).fill(null)};
+          await savePlayer(np);
+          notify("Player added.");
+        }}>+ ADD PLAYER</button>
+      </div>
+    );
+  
+}
+
+// ── Course Search Component (standalone — must be outside App to avoid remount)
+function CourseSearch({ onSelect }) {
+  const [query, setQuery] = useState("");
+  const [results, setResults] = useState([]);
+  const [open, setOpen] = useState(false);
+
+  useEffect(() => {
+    if (query.length >= 2) { setResults(searchCourses(query)); setOpen(true); }
+    else { setResults([]); setOpen(false); }
   }, [query]);
 
   const pick = (course) => {
@@ -166,18 +294,16 @@ function CourseSearch({ onSelect }) {
 
   return (
     <div style={{position:"relative"}}>
-      <input
-        value={query}
-        onChange={e => setQuery(e.target.value)}
+      <input value={query} onChange={e=>setQuery(e.target.value)}
         placeholder="Type course name or city…"
-        style={{width:"100%",padding:"8px 12px",fontSize:14}}
-        onFocus={() => results.length > 0 && setOpen(true)}
+        style={{width:"100%",padding:"8px 12px",fontSize:14,background:"var(--bg2)",border:"1px solid var(--border2)",color:"var(--text)",borderRadius:3,outline:"none",fontFamily:"inherit"}}
+        onFocus={()=>results.length>0&&setOpen(true)}
       />
       {open && results.length > 0 && (
-        <div style={{position:"absolute",top:"100%",left:0,right:0,zIndex:100,background:"var(--bg2)",border:"1px solid var(--gold)",borderRadius:"0 0 6px 6px",maxHeight:280,overflowY:"auto",boxShadow:"0 8px 24px rgba(0,0,0,.6)"}}>
-          {results.map((c,i) => (
-            <div key={i} onClick={() => pick(c)}
-              style={{padding:"11px 16px",cursor:"pointer",borderBottom:"1px solid var(--border)",transition:"background .1s"}}
+        <div style={{position:"absolute",top:"100%",left:0,right:0,zIndex:200,background:"var(--bg2)",border:"1px solid var(--gold)",borderRadius:"0 0 6px 6px",maxHeight:280,overflowY:"auto",boxShadow:"0 8px 24px rgba(0,0,0,.8)"}}>
+          {results.map((c,i)=>(
+            <div key={i} onClick={()=>pick(c)}
+              style={{padding:"11px 16px",cursor:"pointer",borderBottom:"1px solid var(--border)"}}
               onMouseEnter={e=>e.currentTarget.style.background="var(--bg3)"}
               onMouseLeave={e=>e.currentTarget.style.background="transparent"}>
               <div style={{fontSize:15,fontWeight:600,color:"var(--text)"}}>{c.name}</div>
@@ -189,9 +315,7 @@ function CourseSearch({ onSelect }) {
               </div>
             </div>
           ))}
-          <div style={{padding:"8px 16px",fontSize:11,color:"var(--text3)",fontStyle:"italic"}}>
-            Not listed? Fill in the fields below manually.
-          </div>
+          <div style={{padding:"8px 16px",fontSize:11,color:"var(--text3)",fontStyle:"italic"}}>Not listed? Fill in fields below manually.</div>
         </div>
       )}
     </div>
@@ -837,136 +961,6 @@ export default function App() {
 
   // ══════════════════════════════════════════════════════════════════════════
   // ADMIN
-  const AdminView = () => {
-    const [localCourse, setLocalCourse] = useState(course || {});
-    const [saving, setSaving] = useState(false);
-
-    const saveAll = async () => {
-      setSaving(true);
-      await saveCourse(localCourse);
-      setCourse(localCourse);
-      setSaving(false);
-      notify("Course saved!");
-    };
-
-    if (!adminUnlocked) return (
-      <div className="fade-up" style={{maxWidth:340,margin:"0 auto",textAlign:"center"}}>
-        <div style={{fontFamily:"'Bebas Neue'",fontSize:12,letterSpacing:4,color:"var(--green)",marginBottom:10}}>COMMISSIONER ACCESS</div>
-        <h2 style={{fontFamily:"'Bebas Neue'",fontSize:28,marginBottom:24}}>ADMIN LOGIN</h2>
-        <div className="card" style={{padding:28}}>
-          <div className="section-label" style={{textAlign:"left"}}>PIN</div>
-          <input type="password" value={pinInput} onChange={e=>setPinInput(e.target.value)}
-            onKeyDown={e=>{ if(e.key==="Enter"){ if(pinInput===ADMIN_PIN)setAdminUnlocked(true); else setPinError(true); }}}
-            placeholder="••••" style={{width:"100%",fontSize:24,letterSpacing:8,textAlign:"center",marginBottom:10}}/>
-          {pinError && <div style={{color:"var(--red)",fontSize:13,marginBottom:10}}>Incorrect PIN.</div>}
-          <button className="btn-gold" style={{width:"100%"}}
-            onClick={()=>{ if(pinInput===ADMIN_PIN){setAdminUnlocked(true);setPinError(false);}else setPinError(true); }}>
-            UNLOCK
-          </button>
-          <div style={{fontSize:11,color:"var(--text3)",marginTop:12}}>Default PIN: 1234</div>
-        </div>
-      </div>
-    );
-
-    return (
-      <div className="fade-up">
-        {/* Join code banner */}
-        <div style={{marginBottom:24,padding:"16px 20px",background:"var(--bg3)",border:"1px solid var(--border2)",borderRadius:6,display:"flex",alignItems:"center",justifyContent:"space-between",flexWrap:"wrap",gap:12}}>
-          <div>
-            <div className="section-label" style={{marginBottom:2}}>PLAYER JOIN CODE — SHARE THIS</div>
-            <div style={{fontFamily:"'Bebas Neue'",fontSize:30,letterSpacing:5,color:"var(--gold)"}}>{JOIN_CODE}</div>
-          </div>
-          <div style={{fontSize:13,color:"var(--text3)",maxWidth:280}}>Players enter this on the Register screen to join the tournament and enter scores from their phones.</div>
-        </div>
-
-        {/* Course settings */}
-        <div className="section-label">── COURSE SETTINGS</div>
-        <div className="card" style={{padding:20,marginBottom:24}}>
-          <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:12,marginBottom:12}}>
-            {/* Course search */}
-            <div style={{gridColumn:"1/-1"}}>
-              <div style={{fontSize:10,color:"var(--text3)",letterSpacing:1,marginBottom:4}}>SEARCH MINNESOTA COURSES</div>
-              <CourseSearch onSelect={c=>setLocalCourse(prev=>({...prev,name:c.name,city:c.city,slope:c.slope,rating:c.rating,par:c.par||DEFAULT_PAR}))}/>
-            </div>
-            {[["Course Name","name"],["City / State","city"],["Slope Rating","slope"],["Course Rating","rating"]].map(([lbl,key])=>(
-              <div key={key}>
-                <div style={{fontSize:10,color:"var(--text3)",letterSpacing:1,marginBottom:4}}>{lbl.toUpperCase()}</div>
-                <input defaultValue={localCourse[key]??""} key={"course-"+key} type={key==="slope"||key==="rating"?"number":"text"}
-                  step={key==="rating"?".1":undefined}
-                  onBlur={e=>setLocalCourse(c=>({...c,[key]:key==="slope"?parseInt(e.target.value)||0:key==="rating"?parseFloat(e.target.value)||0:e.target.value}))}
-                  style={{width:"100%"}}/>
-              </div>
-            ))}
-          </div>
-
-          {/* Par per hole */}
-          <div style={{marginBottom:12}}>
-            <div style={{fontSize:10,color:"var(--text3)",letterSpacing:1,marginBottom:8}}>PAR PER HOLE (1–18)</div>
-            <div style={{display:"flex",flexWrap:"wrap",gap:6}}>
-              {Array.from({length:18},(_,i)=>(
-                <div key={i} style={{textAlign:"center"}}>
-                  <div style={{fontSize:9,color:"var(--text3)",marginBottom:2}}>{i+1}</div>
-                  <input type="number" min="3" max="6" defaultValue={(localCourse.par||DEFAULT_PAR)[i]}
-                    key={"par-"+i}
-                    onBlur={e=>{ const p=[...(localCourse.par||DEFAULT_PAR)]; p[i]=parseInt(e.target.value)||4; setLocalCourse(c=>({...c,par:p})); }}
-                    style={{width:40,textAlign:"center",padding:"4px 2px"}}/>
-                </div>
-              ))}
-            </div>
-          </div>
-
-          {/* Yardage per hole */}
-          <div style={{marginBottom:16}}>
-            <div style={{fontSize:10,color:"var(--text3)",letterSpacing:1,marginBottom:8}}>YARDAGE PER HOLE (1–18)</div>
-            <div style={{display:"flex",flexWrap:"wrap",gap:6}}>
-              {Array.from({length:18},(_,i)=>(
-                <div key={i} style={{textAlign:"center"}}>
-                  <div style={{fontSize:9,color:"var(--text3)",marginBottom:2}}>{i+1}</div>
-                  <input type="number" min="100" max="700" defaultValue={(localCourse.yards||DEFAULT_YARDS)[i]}
-                    key={"yard-"+i}
-                    onBlur={e=>{ const y=[...(localCourse.yards||DEFAULT_YARDS)]; y[i]=parseInt(e.target.value)||400; setLocalCourse(c=>({...c,yards:y})); }}
-                    style={{width:52,textAlign:"center",padding:"4px 2px"}}/>
-                </div>
-              ))}
-            </div>
-          </div>
-
-          <div style={{marginBottom:16}}>
-            <div style={{fontSize:10,color:"var(--text3)",letterSpacing:1,marginBottom:4}}>DESCRIPTION</div>
-            <textarea defaultValue={localCourse.description??""} key="course-desc" onBlur={e=>setLocalCourse(c=>({...c,description:e.target.value}))} rows={3} style={{width:"100%",resize:"vertical"}}/>
-          </div>
-
-          <button className="btn-gold" onClick={saveAll} disabled={saving} style={{fontSize:13}}>
-            {saving?"SAVING…":"SAVE COURSE CHANGES"}
-          </button>
-        </div>
-
-        {/* Players */}
-        <div className="section-label">── PLAYER ROSTER ({players.length} players)</div>
-        <div className="card" style={{overflow:"hidden",marginBottom:12}}>
-          <div style={{display:"grid",gridTemplateColumns:"1fr 80px 150px 90px",background:"var(--bg3)",padding:"9px 16px",fontSize:10,letterSpacing:2,color:"var(--text3)",fontFamily:"'Bebas Neue'"}}>
-            <span>NAME</span><span>HCP</span><span>FLIGHT</span><span></span>
-          </div>
-          {players.map(p=>(
-            <div key={p.id} style={{display:"grid",gridTemplateColumns:"1fr 80px 150px 90px",padding:"10px 16px",borderBottom:"1px solid var(--border)",alignItems:"center",gap:8}}>
-              <input defaultValue={p.name} key={p.id+"-name"} onBlur={e=>updateField(p.id,"name",e.target.value)} style={{width:"100%",padding:"5px 8px"}}/>
-              <input type="number" defaultValue={p.handicap} key={p.id+"-hcp"} onBlur={e=>updateField(p.id,"handicap",e.target.value)} min="0" max="54" style={{width:65}}/>
-              <select value={p.flight} onChange={e=>updateField(p.id,"flight",e.target.value)} style={{width:"100%"}}>
-                {FLIGHTS.map(f=><option key={f}>{f}</option>)}
-              </select>
-              <button className="btn-danger" onClick={()=>removePlayerDb(p.id)}>✕ Remove</button>
-            </div>
-          ))}
-          {players.length===0 && <div style={{padding:24,textAlign:"center",color:"var(--text3)",fontSize:13}}>No players yet. They'll appear here once they register.</div>}
-        </div>
-        <button className="btn-gold" style={{fontSize:13}} onClick={async()=>{
-          const np={id:`player-${Date.now()}`,name:"New Player",handicap:0,flight:"A Flight",scores:Array(18).fill(null)};
-          await savePlayer(np);
-          notify("Player added.");
-        }}>+ ADD PLAYER</button>
-      </div>
-    );
-  };
 
   // ══════════════════════════════════════════════════════════════════════════
   // ROOT RENDER
@@ -1034,7 +1028,14 @@ export default function App() {
         {screen==="my-scores"       && <MyScores/>}
         {screen==="season" && <SeasonStandings players={players} adminUnlocked={adminUnlocked} />}
         {screen==="handicap" && <HandicapTracker players={players} adminUnlocked={adminUnlocked} onHandicapUpdate={(pid,hcp)=>setPlayers(prev=>prev.map(p=>p.id===pid?{...p,handicap:hcp}:p))} />}
-        {screen==="admin"           && <AdminView/>}
+        {screen==="admin" && <AdminView
+          course={course} players={players} adminUnlocked={adminUnlocked}
+          setAdminUnlocked={setAdminUnlocked} pinInput={pinInput} setPinInput={setPinInput}
+          pinError={pinError} setPinError={setPinError}
+          savePlayer={savePlayer} removePlayerDb={removePlayerDb}
+          saveCourse={saveCourse} setCourse={setCourse}
+          updateField={updateField} notify={notify}
+        />}
       </div>
     </div>
   );
