@@ -1,6 +1,7 @@
 import { useState, useRef, useEffect } from "react";
 import SeasonStandings from "./Season";
 import HandicapTracker from "./Handicap";
+import { searchCourses } from "./mnCourses";
 import { db } from "./firebase";
 import {
   doc, collection, onSnapshot, setDoc, updateDoc, deleteDoc, getDoc
@@ -141,6 +142,62 @@ button{cursor:pointer;font-family:'Bebas Neue',sans-serif;letter-spacing:1.5px;b
 `;
 
 // ═════════════════════════════════════════════════════════════════════════════
+// ── Course Search Component
+function CourseSearch({ onSelect }) {
+  const [query, setQuery] = React.useState("");
+  const [results, setResults] = React.useState([]);
+  const [open, setOpen] = React.useState(false);
+
+  React.useEffect(() => {
+    if (query.length >= 2) {
+      setResults(searchCourses(query));
+      setOpen(true);
+    } else {
+      setResults([]);
+      setOpen(false);
+    }
+  }, [query]);
+
+  const pick = (course) => {
+    onSelect(course);
+    setQuery(course.name + " — " + course.city);
+    setOpen(false);
+  };
+
+  return (
+    <div style={{position:"relative"}}>
+      <input
+        value={query}
+        onChange={e => setQuery(e.target.value)}
+        placeholder="Type course name or city…"
+        style={{width:"100%",padding:"8px 12px",fontSize:14}}
+        onFocus={() => results.length > 0 && setOpen(true)}
+      />
+      {open && results.length > 0 && (
+        <div style={{position:"absolute",top:"100%",left:0,right:0,zIndex:100,background:"var(--bg2)",border:"1px solid var(--gold)",borderRadius:"0 0 6px 6px",maxHeight:280,overflowY:"auto",boxShadow:"0 8px 24px rgba(0,0,0,.6)"}}>
+          {results.map((c,i) => (
+            <div key={i} onClick={() => pick(c)}
+              style={{padding:"11px 16px",cursor:"pointer",borderBottom:"1px solid var(--border)",transition:"background .1s"}}
+              onMouseEnter={e=>e.currentTarget.style.background="var(--bg3)"}
+              onMouseLeave={e=>e.currentTarget.style.background="transparent"}>
+              <div style={{fontSize:15,fontWeight:600,color:"var(--text)"}}>{c.name}</div>
+              <div style={{fontSize:12,color:"var(--text3)",display:"flex",gap:16,marginTop:2}}>
+                <span>📍 {c.city}, MN</span>
+                <span>Par {c.par}</span>
+                <span>Rating {c.rating}</span>
+                <span>Slope {c.slope}</span>
+              </div>
+            </div>
+          ))}
+          <div style={{padding:"8px 16px",fontSize:11,color:"var(--text3)",fontStyle:"italic"}}>
+            Not listed? Fill in the fields below manually.
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
 export default function App() {
   // ── Firebase state ──
   const [players, setPlayers]   = useState([]);
@@ -826,6 +883,11 @@ export default function App() {
         <div className="section-label">── COURSE SETTINGS</div>
         <div className="card" style={{padding:20,marginBottom:24}}>
           <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:12,marginBottom:12}}>
+            {/* Course search */}
+            <div style={{gridColumn:"1/-1"}}>
+              <div style={{fontSize:10,color:"var(--text3)",letterSpacing:1,marginBottom:4}}>SEARCH MINNESOTA COURSES</div>
+              <CourseSearch onSelect={c=>setLocalCourse(prev=>({...prev,name:c.name,city:c.city,slope:c.slope,rating:c.rating,par:c.par||DEFAULT_PAR}))}/>
+            </div>
             {[["Course Name","name"],["City / State","city"],["Slope Rating","slope"],["Course Rating","rating"]].map(([lbl,key])=>(
               <div key={key}>
                 <div style={{fontSize:10,color:"var(--text3)",letterSpacing:1,marginBottom:4}}>{lbl.toUpperCase()}</div>

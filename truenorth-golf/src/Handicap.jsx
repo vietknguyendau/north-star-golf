@@ -1,4 +1,5 @@
 import { useState, useEffect } from "react";
+import { searchCourses } from "./mnCourses";
 import { db } from "./firebase";
 import { doc, collection, onSnapshot, setDoc, updateDoc } from "firebase/firestore";
 
@@ -48,6 +49,39 @@ const CSS = `
 .spark-bar { display:flex; align-items:flex-end; gap:2px; height:32px; }
 .spark-seg { border-radius:2px 2px 0 0; min-width:8px; transition:all .3s; }
 `;
+
+
+// ── Inline course search for handicap round entry
+function HcpCourseSearch({ onSelect }) {
+  const [q, setQ] = React.useState("");
+  const [res, setRes] = React.useState([]);
+  const [open, setOpen] = React.useState(false);
+  React.useEffect(() => {
+    if (q.length >= 2) { setRes(searchCourses(q)); setOpen(true); }
+    else { setRes([]); setOpen(false); }
+  }, [q]);
+  const pick = (c) => { onSelect(c); setQ(c.name); setOpen(false); };
+  return (
+    <div style={{position:"relative"}}>
+      <input value={q} onChange={e=>setQ(e.target.value)} placeholder="Type course name or city…"
+        style={{width:"100%",padding:"6px 8px",fontSize:13}} onFocus={()=>res.length>0&&setOpen(true)}/>
+      {open && res.length > 0 && (
+        <div style={{position:"absolute",top:"100%",left:0,right:0,zIndex:100,background:"var(--bg2)",border:"1px solid var(--gold)",borderRadius:"0 0 4px 4px",maxHeight:220,overflowY:"auto",boxShadow:"0 8px 24px rgba(0,0,0,.6)"}}>
+          {res.map((c,i)=>(
+            <div key={i} onClick={()=>pick(c)} style={{padding:"9px 12px",cursor:"pointer",borderBottom:"1px solid var(--border)"}}
+              onMouseEnter={e=>e.currentTarget.style.background="var(--bg3)"}
+              onMouseLeave={e=>e.currentTarget.style.background="transparent"}>
+              <div style={{fontSize:13,fontWeight:600,color:"var(--text)"}}>{c.name}</div>
+              <div style={{fontSize:11,color:"var(--text3)",display:"flex",gap:12,marginTop:1}}>
+                <span>{c.city}, MN</span><span>Par {c.par}</span><span>Rating {c.rating}</span><span>Slope {c.slope}</span>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
 
 export default function HandicapTracker({ players, adminUnlocked, onHandicapUpdate }) {
   const [hcpData, setHcpData]       = useState({});
