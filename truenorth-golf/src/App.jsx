@@ -618,7 +618,7 @@ export default function App() {
               </div>
               <div>
                 <div className="section-label">FULL NAME</div>
-                <input value={regForm.name} onChange={e=>setRegForm(f=>({...f,name:e.target.value}))} placeholder="First Last" style={{width:"100%"}}/>
+                <input defaultValue={regForm.name} onBlur={e=>setRegForm(f=>({...f,name:e.target.value}))} placeholder="First Last" style={{width:"100%"}}/>
               </div>
               <div style={{display:"flex",gap:12}}>
                 <div style={{flex:1}}>
@@ -891,9 +891,9 @@ export default function App() {
             {[["Course Name","name"],["City / State","city"],["Slope Rating","slope"],["Course Rating","rating"]].map(([lbl,key])=>(
               <div key={key}>
                 <div style={{fontSize:10,color:"var(--text3)",letterSpacing:1,marginBottom:4}}>{lbl.toUpperCase()}</div>
-                <input value={localCourse[key]??""} type={key==="slope"||key==="rating"?"number":"text"}
+                <input defaultValue={localCourse[key]??""} key={"course-"+key} type={key==="slope"||key==="rating"?"number":"text"}
                   step={key==="rating"?".1":undefined}
-                  onChange={e=>setLocalCourse(c=>({...c,[key]:key==="slope"?parseInt(e.target.value)||0:key==="rating"?parseFloat(e.target.value)||0:e.target.value}))}
+                  onBlur={e=>setLocalCourse(c=>({...c,[key]:key==="slope"?parseInt(e.target.value)||0:key==="rating"?parseFloat(e.target.value)||0:e.target.value}))}
                   style={{width:"100%"}}/>
               </div>
             ))}
@@ -906,8 +906,9 @@ export default function App() {
               {Array.from({length:18},(_,i)=>(
                 <div key={i} style={{textAlign:"center"}}>
                   <div style={{fontSize:9,color:"var(--text3)",marginBottom:2}}>{i+1}</div>
-                  <input type="number" min="3" max="6" value={(localCourse.par||DEFAULT_PAR)[i]}
-                    onChange={e=>{ const p=[...(localCourse.par||DEFAULT_PAR)]; p[i]=parseInt(e.target.value)||4; setLocalCourse(c=>({...c,par:p})); }}
+                  <input type="number" min="3" max="6" defaultValue={(localCourse.par||DEFAULT_PAR)[i]}
+                    key={"par-"+i}
+                    onBlur={e=>{ const p=[...(localCourse.par||DEFAULT_PAR)]; p[i]=parseInt(e.target.value)||4; setLocalCourse(c=>({...c,par:p})); }}
                     style={{width:40,textAlign:"center",padding:"4px 2px"}}/>
                 </div>
               ))}
@@ -921,8 +922,9 @@ export default function App() {
               {Array.from({length:18},(_,i)=>(
                 <div key={i} style={{textAlign:"center"}}>
                   <div style={{fontSize:9,color:"var(--text3)",marginBottom:2}}>{i+1}</div>
-                  <input type="number" min="100" max="700" value={(localCourse.yards||DEFAULT_YARDS)[i]}
-                    onChange={e=>{ const y=[...(localCourse.yards||DEFAULT_YARDS)]; y[i]=parseInt(e.target.value)||400; setLocalCourse(c=>({...c,yards:y})); }}
+                  <input type="number" min="100" max="700" defaultValue={(localCourse.yards||DEFAULT_YARDS)[i]}
+                    key={"yard-"+i}
+                    onBlur={e=>{ const y=[...(localCourse.yards||DEFAULT_YARDS)]; y[i]=parseInt(e.target.value)||400; setLocalCourse(c=>({...c,yards:y})); }}
                     style={{width:52,textAlign:"center",padding:"4px 2px"}}/>
                 </div>
               ))}
@@ -931,7 +933,7 @@ export default function App() {
 
           <div style={{marginBottom:16}}>
             <div style={{fontSize:10,color:"var(--text3)",letterSpacing:1,marginBottom:4}}>DESCRIPTION</div>
-            <textarea value={localCourse.description??""} onChange={e=>setLocalCourse(c=>({...c,description:e.target.value}))} rows={3} style={{width:"100%",resize:"vertical"}}/>
+            <textarea defaultValue={localCourse.description??""} key="course-desc" onBlur={e=>setLocalCourse(c=>({...c,description:e.target.value}))} rows={3} style={{width:"100%",resize:"vertical"}}/>
           </div>
 
           <button className="btn-gold" onClick={saveAll} disabled={saving} style={{fontSize:13}}>
@@ -947,8 +949,8 @@ export default function App() {
           </div>
           {players.map(p=>(
             <div key={p.id} style={{display:"grid",gridTemplateColumns:"1fr 80px 150px 90px",padding:"10px 16px",borderBottom:"1px solid var(--border)",alignItems:"center",gap:8}}>
-              <input value={p.name} onChange={e=>updateField(p.id,"name",e.target.value)} style={{width:"100%",padding:"5px 8px"}}/>
-              <input type="number" value={p.handicap} onChange={e=>updateField(p.id,"handicap",e.target.value)} min="0" max="54" style={{width:65}}/>
+              <input defaultValue={p.name} key={p.id+"-name"} onBlur={e=>updateField(p.id,"name",e.target.value)} style={{width:"100%",padding:"5px 8px"}}/>
+              <input type="number" defaultValue={p.handicap} key={p.id+"-hcp"} onBlur={e=>updateField(p.id,"handicap",e.target.value)} min="0" max="54" style={{width:65}}/>
               <select value={p.flight} onChange={e=>updateField(p.id,"flight",e.target.value)} style={{width:"100%"}}>
                 {FLIGHTS.map(f=><option key={f}>{f}</option>)}
               </select>
