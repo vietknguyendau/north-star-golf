@@ -154,7 +154,8 @@ function AdminView({ course, players, adminUnlocked, setAdminUnlocked, pinInput,
       setCourse(localCourse);
       setSaving(false);
       notify("Course saved!");
-  
+    };
+
     if (!adminUnlocked) return (
       <div className="fade-up" style={{maxWidth:340,margin:"0 auto",textAlign:"center"}}>
         <div style={{fontFamily:"'Bebas Neue'",fontSize:12,letterSpacing:4,color:"var(--green)",marginBottom:10}}>COMMISSIONER ACCESS</div>
