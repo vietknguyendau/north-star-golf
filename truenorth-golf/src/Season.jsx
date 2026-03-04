@@ -292,7 +292,7 @@ export default function SeasonStandings({ players, adminUnlocked }) {
             {/* Team A */}
             <div style={{textAlign:"center"}}>
               {adminUnlocked ? (
-                <input value={localRyder.teamA?.name||"Team USA"} onChange={e=>setLocalRyder(r=>({...r,teamA:{...r.teamA,name:e.target.value}}))}
+                <input defaultValue={localRyder.teamA?.name||"Team USA"} onBlur={e=>setLocalRyder(r=>({...r,teamA:{...r.teamA,name:e.target.value}}))}
                   style={{fontFamily:"'Bebas Neue'",fontSize:22,letterSpacing:2,background:"transparent",border:"none",borderBottom:"1px solid var(--border2)",color:"var(--green-bright)",textAlign:"center",width:"100%",outline:"none"}}/>
               ) : (
                 <div style={{fontFamily:"'Bebas Neue'",fontSize:22,letterSpacing:2,color:"var(--green-bright)"}}>{localRyder.teamA?.name||"Team USA"}</div>
@@ -307,7 +307,7 @@ export default function SeasonStandings({ players, adminUnlocked }) {
             {/* Team B */}
             <div style={{textAlign:"center"}}>
               {adminUnlocked ? (
-                <input value={localRyder.teamB?.name||"Team Europe"} onChange={e=>setLocalRyder(r=>({...r,teamB:{...r.teamB,name:e.target.value}}))}
+                <input defaultValue={localRyder.teamB?.name||"Team Europe"} onBlur={e=>setLocalRyder(r=>({...r,teamB:{...r.teamB,name:e.target.value}}))}
                   style={{fontFamily:"'Bebas Neue'",fontSize:22,letterSpacing:2,background:"transparent",border:"none",borderBottom:"1px solid var(--border2)",color:"#4090c0",textAlign:"center",width:"100%",outline:"none"}}/>
               ) : (
                 <div style={{fontFamily:"'Bebas Neue'",fontSize:22,letterSpacing:2,color:"#4090c0"}}>{localRyder.teamB?.name||"Team Europe"}</div>
@@ -388,7 +388,7 @@ export default function SeasonStandings({ players, adminUnlocked }) {
               </div>
               {adminUnlocked ? (
                 <>
-                  <input value={m.playerA} onChange={e=>updateMatch(m.id,"playerA",e.target.value)} placeholder="Player(s) A" style={{flex:1,minWidth:100,padding:"5px 8px",fontSize:13}}/>
+                  <input defaultValue={m.playerA} onBlur={e=>updateMatch(m.id,"playerA",e.target.value)} placeholder="Player(s) A" style={{flex:1,minWidth:100,padding:"5px 8px",fontSize:13}}/>
                   <select value={m.result} onChange={e=>updateMatch(m.id,"result",e.target.value)}
                     style={{padding:"5px 10px",fontSize:13,minWidth:120}}>
                     <option value="pending">Pending</option>
@@ -396,7 +396,7 @@ export default function SeasonStandings({ players, adminUnlocked }) {
                     <option value="B">{localRyder.teamB?.name||"Team B"} wins</option>
                     <option value="half">Halved</option>
                   </select>
-                  <input value={m.playerB} onChange={e=>updateMatch(m.id,"playerB",e.target.value)} placeholder="Player(s) B" style={{flex:1,minWidth:100,padding:"5px 8px",fontSize:13}}/>
+                  <input defaultValue={m.playerB} onBlur={e=>updateMatch(m.id,"playerB",e.target.value)} placeholder="Player(s) B" style={{flex:1,minWidth:100,padding:"5px 8px",fontSize:13}}/>
                   <button onClick={()=>removeMatch(m.id)} style={{background:"transparent",border:"1px solid #2a1010",color:"var(--red)",padding:"4px 8px",borderRadius:3,cursor:"pointer",fontFamily:"'Bebas Neue'",fontSize:11}}>✕</button>
                 </>
               ) : (
@@ -455,7 +455,7 @@ export default function SeasonStandings({ players, adminUnlocked }) {
                 {ev?.payoutTop4 && (
                   <div style={{display:"flex",alignItems:"center",gap:8}}>
                     <span style={{fontSize:12,color:"var(--text3)"}}>POT SIZE ($)</span>
-                    <input type="number" value={potSize[editingEvent]||""} onChange={e=>setPotSize(p=>({...p,[editingEvent]:e.target.value}))}
+                    <input type="number" defaultValue={potSize[editingEvent]||""} onBlur={e=>setPotSize(p=>({...p,[editingEvent]:e.target.value}))}
                       placeholder="e.g. 200" style={{width:100,textAlign:"center"}}/>
                   </div>
                 )}

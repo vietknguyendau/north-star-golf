@@ -614,7 +614,7 @@ export default function App() {
             <div style={{display:"flex",flexDirection:"column",gap:16}}>
               <div>
                 <div className="section-label">JOIN CODE</div>
-                <input value={regForm.code} onChange={e=>setRegForm(f=>({...f,code:e.target.value.toUpperCase()}))} placeholder="e.g. NORTHSTAR24" style={{width:"100%",letterSpacing:3,fontFamily:"'Bebas Neue'",fontSize:18,textAlign:"center"}}/>
+                <input defaultValue={regForm.code} onBlur={e=>setRegForm(f=>({...f,code:e.target.value.toUpperCase()}))} onChange={e=>e.target.value=e.target.value.toUpperCase()} placeholder="e.g. NORTHSTAR24" style={{width:"100%",letterSpacing:3,fontFamily:"'Bebas Neue'",fontSize:18,textAlign:"center"}}/>
               </div>
               <div>
                 <div className="section-label">FULL NAME</div>
@@ -623,7 +623,7 @@ export default function App() {
               <div style={{display:"flex",gap:12}}>
                 <div style={{flex:1}}>
                   <div className="section-label">HANDICAP</div>
-                  <input type="number" value={regForm.handicap} onChange={e=>setRegForm(f=>({...f,handicap:e.target.value}))} placeholder="0" min="0" max="54" style={{width:"100%"}}/>
+                  <input type="number" defaultValue={regForm.handicap} onBlur={e=>setRegForm(f=>({...f,handicap:e.target.value}))} placeholder="0" min="0" max="54" style={{width:"100%"}}/>
                 </div>
                 <div style={{flex:2}}>
                   <div className="section-label">FLIGHT</div>
@@ -635,11 +635,11 @@ export default function App() {
               <div style={{display:"flex",gap:12}}>
                 <div style={{flex:1}}>
                   <div className="section-label">YOUR PIN</div>
-                  <input type="password" maxLength={4} value={regForm.pin} onChange={e=>setRegForm(f=>({...f,pin:e.target.value.replace(/\D/g,"")}))} placeholder="4 digits" style={{width:"100%",letterSpacing:6,textAlign:"center",fontSize:18}}/>
+                  <input type="password" maxLength={4} defaultValue={regForm.pin} onBlur={e=>setRegForm(f=>({...f,pin:e.target.value.replace(/\D/g,"")}))} placeholder="4 digits" style={{width:"100%",letterSpacing:6,textAlign:"center",fontSize:18}}/>
                 </div>
                 <div style={{flex:1}}>
                   <div className="section-label">CONFIRM PIN</div>
-                  <input type="password" maxLength={4} value={regForm.pin2} onChange={e=>setRegForm(f=>({...f,pin2:e.target.value.replace(/\D/g,"")}))} placeholder="4 digits" style={{width:"100%",letterSpacing:6,textAlign:"center",fontSize:18}}/>
+                  <input type="password" maxLength={4} defaultValue={regForm.pin2} onBlur={e=>setRegForm(f=>({...f,pin2:e.target.value.replace(/\D/g,"")}))} placeholder="4 digits" style={{width:"100%",letterSpacing:6,textAlign:"center",fontSize:18}}/>
                 </div>
               </div>
               <div style={{fontSize:12,color:"var(--text3)",fontStyle:"italic"}}>🔒 Your PIN protects your scorecard. Only you (and the commissioner) can edit your scores.</div>

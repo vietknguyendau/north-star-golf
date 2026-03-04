@@ -326,7 +326,7 @@ export default function HandicapTracker({ players, adminUnlocked, onHandicapUpda
                         ].map(([lbl,key,type,ph])=>(
                           <div key={key}>
                             <div style={{fontSize:9,color:"var(--text3)",letterSpacing:1,marginBottom:4}}>{lbl}</div>
-                            <input type={type} value={roundForm[key]} onChange={e=>setRoundForm(f=>({...f,[key]:e.target.value}))}
+                            <input type={type} defaultValue={roundForm[key]} onBlur={e=>setRoundForm(f=>({...f,[key]:e.target.value}))}
                               placeholder={ph} style={{width:"100%",padding:"6px 8px",fontSize:13}}/>
                           </div>
                         ))}
