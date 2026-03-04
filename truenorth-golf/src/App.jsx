@@ -1,4 +1,5 @@
 import React, { useState, useRef, useEffect } from "react";
+import TournamentHistory from "./History";
 import SeasonStandings from "./Season";
 import HandicapTracker from "./Handicap";
 import { searchCourses } from "./mnCourses";
@@ -984,7 +985,7 @@ export default function App() {
   // ══════════════════════════════════════════════════════════════════════════
   // ROOT RENDER
   const NAV = [
-    ["leaderboard","🏆 LEADERBOARD"],["season","🌟 STANDINGS"],["scorecard","📋 SCORECARDS"],
+    ["leaderboard","🏆 LEADERBOARD"],["history","📖 HISTORY"],["season","🌟 STANDINGS"],["scorecard","📋 SCORECARDS"],
     ["course","🗺 COURSE"],["register","✍ REGISTER"],
     ["my-scores-login","✏️ MY SCORES"],["handicap","🏅 HANDICAPS"],["admin","⚙ ADMIN"],
   ];
@@ -1045,6 +1046,7 @@ export default function App() {
         {screen==="register"        && <RegisterView/>}
         {screen==="my-scores-login" && <MyScoresLogin/>}
         {screen==="my-scores"       && <MyScores/>}
+        {screen==="history" && <TournamentHistory players={players} />}
         {screen==="season" && <SeasonStandings players={players} adminUnlocked={adminUnlocked} />}
         {screen==="handicap" && <HandicapTracker players={players} adminUnlocked={adminUnlocked} onHandicapUpdate={(pid,hcp)=>setPlayers(prev=>prev.map(p=>p.id===pid?{...p,handicap:hcp}:p))} />}
         {screen==="admin" && <AdminView

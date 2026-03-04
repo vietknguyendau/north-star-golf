@@ -113,11 +113,27 @@ export default function SeasonStandings({ players, adminUnlocked }) {
     Object.entries(manualEntry).forEach(([pid, place]) => { if (place) toSave[pid] = parseInt(place); });
     await setDoc(doc(db,"tournaments",TOURNAMENT_ID,"season_results",editingEvent), toSave);
     // Save pot/payout if applicable
-    if (potSize[editingEvent]) {
-      await setDoc(doc(db,"tournaments",TOURNAMENT_ID,"event_meta",editingEvent), { pot: parseInt(potSize[editingEvent])||0, locked: true });
+    const pot = potSize[editingEvent] ? parseInt(potSize[editingEvent]) : 0;
+    if (pot) {
+      await setDoc(doc(db,"tournaments",TOURNAMENT_ID,"event_meta",editingEvent), { pot, locked: true });
     } else {
       await setDoc(doc(db,"tournaments",TOURNAMENT_ID,"event_meta",editingEvent), { locked: true });
     }
+    // Auto-snapshot: freeze leaderboard for history tab
+    const ev = SEASON_EVENTS.find(e => e.id === editingEvent);
+    const leaderboard = Object.entries(toSave)
+      .map(([pid, place]) => ({ id: pid, place }))
+      .sort((a,b) => a.place - b.place);
+    await setDoc(doc(db,"tournaments",TOURNAMENT_ID,"tournament_snapshots",editingEvent), {
+      eventId: editingEvent,
+      eventName: ev?.name || editingEvent,
+      date: ev?.date || "",
+      course: ev?.course || "",
+      multiplier: ev?.multiplier || 1,
+      pot: pot || 0,
+      lockedAt: Date.now(),
+      leaderboard,
+    });
     setSaving(false); setEditingEvent(null); setManualEntry({});
   };
 
