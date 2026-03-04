@@ -1,9 +1,17 @@
 import { useState, useRef, useEffect } from "react";
 import SeasonStandings from "./Season";
+import HandicapTracker from "./Handicap";
 import { db } from "./firebase";
 import {
   doc, collection, onSnapshot, setDoc, updateDoc, deleteDoc, getDoc
 } from "firebase/firestore";
+
+
+// ── Simple PIN hash (SHA-256 via Web Crypto API)
+const hashPin = async (pin) => {
+  const buf = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(pin));
+  return Array.from(new Uint8Array(buf)).map(b=>b.toString(16).padStart(2,"0")).join("");
+};
 
 // ─── Constants ───────────────────────────────────────────────────────────────
 const FLIGHTS       = ["Championship", "A Flight", "B Flight", "C Flight"];
@@ -146,7 +154,7 @@ export default function App() {
   const [selectedPid, setSelectedPid] = useState(null);
   const [activePlayer, setActivePlayer] = useState(null);
   const [activeHole, setActiveHole]   = useState(0);
-  const [regForm, setRegForm]         = useState({ code:"", name:"", handicap:"", flight:"Championship" });
+  const [regForm, setRegForm]         = useState({ code:"", name:"", handicap:"", flight:"Championship", pin:"", pin2:"" });
   const [regError, setRegError]       = useState("");
   const [regSuccess, setRegSuccess]   = useState(false);
   const [showScModal, setShowScModal] = useState(false);
@@ -154,6 +162,10 @@ export default function App() {
   const [pinInput, setPinInput]       = useState("");
   const [pinError, setPinError]       = useState(false);
   const [notif, setNotif]             = useState(null);
+  const [pinAttempts, setPinAttempts] = useState({});
+  const [scorePin, setScorePin]       = useState("");
+  const [scorePinError, setScorePinError] = useState("");
+  const [pendingPlayer, setPendingPlayer] = useState(null);
   const fileRef = useRef();
 
   // ── Firestore listeners ──
@@ -262,8 +274,11 @@ export default function App() {
     if (regForm.code.toUpperCase() !== JOIN_CODE) { setRegError("Invalid join code."); return; }
     if (!regForm.name.trim()) { setRegError("Please enter your name."); return; }
     if (players.find(p=>p.name.toLowerCase()===regForm.name.trim().toLowerCase())) { setRegError("Name already registered."); return; }
+    if (!regForm.pin || regForm.pin.length !== 4 || !/^\d{4}$/.test(regForm.pin)) { setRegError("Please set a 4-digit PIN."); return; }
+    if (regForm.pin !== regForm.pin2) { setRegError("PINs do not match."); return; }
     const id  = `player-${Date.now()}`;
-    const np  = { id, name:regForm.name.trim(), handicap:parseInt(regForm.handicap)||0, flight:regForm.flight, scores:Array(18).fill(null) };
+    const pinHash = await hashPin(regForm.pin);
+    const np  = { id, name:regForm.name.trim(), handicap:parseInt(regForm.handicap)||0, flight:regForm.flight, scores:Array(18).fill(null), pinHash };
     await savePlayer(np);
     setActivePlayer(np);
     setRegSuccess(true);
@@ -560,6 +575,17 @@ export default function App() {
                   </select>
                 </div>
               </div>
+              <div style={{display:"flex",gap:12}}>
+                <div style={{flex:1}}>
+                  <div className="section-label">YOUR PIN</div>
+                  <input type="password" maxLength={4} value={regForm.pin} onChange={e=>setRegForm(f=>({...f,pin:e.target.value.replace(/\D/g,"")}))} placeholder="4 digits" style={{width:"100%",letterSpacing:6,textAlign:"center",fontSize:18}}/>
+                </div>
+                <div style={{flex:1}}>
+                  <div className="section-label">CONFIRM PIN</div>
+                  <input type="password" maxLength={4} value={regForm.pin2} onChange={e=>setRegForm(f=>({...f,pin2:e.target.value.replace(/\D/g,"")}))} placeholder="4 digits" style={{width:"100%",letterSpacing:6,textAlign:"center",fontSize:18}}/>
+                </div>
+              </div>
+              <div style={{fontSize:12,color:"var(--text3)",fontStyle:"italic"}}>🔒 Your PIN protects your scorecard. Only you (and the commissioner) can edit your scores.</div>
               {regError && <div style={{fontSize:13,color:"var(--red)",background:"#2a0808",border:"1px solid #4a1010",padding:"10px 14px",borderRadius:4}}>{regError}</div>}
               <button className="btn-gold" style={{width:"100%",padding:13,fontSize:15,marginTop:4}} onClick={handleRegister}>REGISTER &amp; JOIN →</button>
             </div>
@@ -581,27 +607,88 @@ export default function App() {
 
   // ══════════════════════════════════════════════════════════════════════════
   // MY SCORES LOGIN
-  const MyScoresLogin = () => (
-    <div className="fade-up" style={{maxWidth:460,margin:"0 auto"}}>
-      <div style={{textAlign:"center",marginBottom:24}}>
-        <div style={{fontFamily:"'Bebas Neue'",fontSize:13,letterSpacing:4,color:"var(--green)",marginBottom:6}}>SCORE ENTRY</div>
-        <h2 style={{fontFamily:"'Bebas Neue'",fontSize:28,letterSpacing:2}}>WHO ARE YOU?</h2>
-      </div>
-      <div className="card" style={{overflow:"hidden"}}>
-        {players.length === 0 && <div style={{padding:32,textAlign:"center",color:"var(--text3)",fontSize:14}}>No players registered yet.<br/>Register first using your join code.</div>}
-        {players.map(p=>(
-          <div key={p.id} className="player-row" style={{padding:"14px 20px",display:"flex",justifyContent:"space-between",alignItems:"center"}}
-            onClick={()=>{ setActivePlayer(p); setActiveHole(Math.max(0,holesPlayed(p)-1)||0); setScreen("my-scores"); }}>
-            <div>
-              <div style={{fontSize:17,fontWeight:600}}>{p.name}</div>
-              <div style={{fontSize:12,color:"var(--text3)"}}>{p.flight} · HCP {p.handicap} · Thru {holesPlayed(p)||"—"}</div>
+  const MyScoresLogin = () => {
+    const handlePinSubmit = async () => {
+      if (!pendingPlayer) return;
+      const attempts = pinAttempts[pendingPlayer.id] || 0;
+      if (attempts >= 5) { setScorePinError("Too many attempts. Ask the commissioner to reset your PIN."); return; }
+      // Admin override — admin PIN bypasses player PIN
+      if (scorePin === ADMIN_PIN) {
+        setActivePlayer(pendingPlayer);
+        setActiveHole(Math.max(0, holesPlayed(pendingPlayer)-1)||0);
+        setScreen("my-scores");
+        setScorePin(""); setScorePinError(""); setPendingPlayer(null);
+        return;
+      }
+      const hash = await hashPin(scorePin);
+      if (hash === pendingPlayer.pinHash) {
+        setActivePlayer(pendingPlayer);
+        setActiveHole(Math.max(0, holesPlayed(pendingPlayer)-1)||0);
+        setScreen("my-scores");
+        setPinAttempts(prev => ({ ...prev, [pendingPlayer.id]: 0 }));
+        setScorePin(""); setScorePinError(""); setPendingPlayer(null);
+      } else {
+        const newAttempts = attempts + 1;
+        setPinAttempts(prev => ({ ...prev, [pendingPlayer.id]: newAttempts }));
+        setScorePinError(`Incorrect PIN. ${5 - newAttempts} attempt${5-newAttempts===1?"":"s"} remaining.`);
+      }
+    };
+    return (
+      <div className="fade-up" style={{maxWidth:460,margin:"0 auto"}}>
+        {!pendingPlayer ? (
+          <>
+            <div style={{textAlign:"center",marginBottom:24}}>
+              <div style={{fontFamily:"'Bebas Neue'",fontSize:13,letterSpacing:4,color:"var(--green)",marginBottom:6}}>SCORE ENTRY</div>
+              <h2 style={{fontFamily:"'Bebas Neue'",fontSize:28,letterSpacing:2}}>WHO ARE YOU?</h2>
             </div>
-            <span style={{color:"var(--gold)",fontSize:12,fontFamily:"'Bebas Neue'",letterSpacing:1}}>SELECT →</span>
+            <div className="card" style={{overflow:"hidden"}}>
+              {players.length === 0 && <div style={{padding:32,textAlign:"center",color:"var(--text3)",fontSize:14}}>No players registered yet.<br/>Register first using your join code.</div>}
+              {players.map(p=>(
+                <div key={p.id} className="player-row" style={{padding:"14px 20px",display:"flex",justifyContent:"space-between",alignItems:"center"}}
+                  onClick={()=>{ setPendingPlayer(p); setScorePin(""); setScorePinError(""); }}>
+                  <div>
+                    <div style={{fontSize:17,fontWeight:600}}>{p.name}</div>
+                    <div style={{fontSize:12,color:"var(--text3)"}}>{p.flight} · HCP {p.handicap} · Thru {holesPlayed(p)||"—"}</div>
+                  </div>
+                  <span style={{color:"var(--gold)",fontSize:12,fontFamily:"'Bebas Neue'",letterSpacing:1}}>SELECT →</span>
+                </div>
+              ))}
+            </div>
+          </>
+        ) : (
+          <div style={{textAlign:"center"}}>
+            <div style={{fontFamily:"'Bebas Neue'",fontSize:13,letterSpacing:4,color:"var(--green)",marginBottom:8}}>SCORE ENTRY</div>
+            <h2 style={{fontFamily:"'Bebas Neue'",fontSize:28,letterSpacing:2,marginBottom:4}}>{pendingPlayer.name}</h2>
+            <div style={{fontSize:12,color:"var(--text3)",marginBottom:28}}>Enter your 4-digit PIN to continue</div>
+            <div className="card" style={{padding:28,maxWidth:320,margin:"0 auto"}}>
+              <div style={{display:"flex",justifyContent:"center",gap:12,marginBottom:20}}>
+                {[0,1,2,3].map(i=>(
+                  <div key={i} style={{width:48,height:56,border:`2px solid ${scorePin.length>i?"var(--gold)":"var(--border2)"}`,borderRadius:6,display:"flex",alignItems:"center",justifyContent:"center",fontSize:28,background:"var(--bg3)",color:"var(--gold)",transition:"all .15s"}}>
+                    {scorePin.length>i?"●":""}
+                  </div>
+                ))}
+              </div>
+              <div style={{display:"grid",gridTemplateColumns:"repeat(3,1fr)",gap:8,marginBottom:12}}>
+                {[1,2,3,4,5,6,7,8,9,"",0,"⌫"].map((k,i)=>(
+                  <button key={i} onClick={()=>{
+                    if(k==="⌫") setScorePin(p=>p.slice(0,-1));
+                    else if(k===""||scorePin.length>=4) return;
+                    else setScorePin(p=>p+k);
+                    setScorePinError("");
+                  }} style={{padding:"16px 8px",fontFamily:"'DM Mono'",fontSize:20,background:k==="⌫"?"var(--bg3)":"var(--bg4)",border:"1px solid var(--border2)",borderRadius:6,color:k==="⌫"?"var(--red)":"var(--text)",cursor:k===""?"default":"pointer",opacity:k===""?0:1}}>
+                    {k}
+                  </button>
+                ))}
+              </div>
+              {scorePinError && <div style={{fontSize:13,color:"var(--red)",background:"#2a0808",border:"1px solid #4a1010",padding:"8px 12px",borderRadius:4,marginBottom:12}}>{scorePinError}</div>}
+              <button className="btn-gold" style={{width:"100%",fontSize:14,padding:12}} onClick={handlePinSubmit} disabled={scorePin.length!==4}>ENTER →</button>
+              <button className="btn-ghost" style={{width:"100%",fontSize:12,marginTop:8}} onClick={()=>{ setPendingPlayer(null); setScorePin(""); setScorePinError(""); }}>← BACK</button>
+            </div>
           </div>
-        ))}
+        )}
       </div>
-    </div>
-  );
+    );
+  };
 
   // ══════════════════════════════════════════════════════════════════════════
   // MY SCORES — mobile entry
@@ -822,7 +909,7 @@ export default function App() {
   const NAV = [
     ["leaderboard","🏆 LEADERBOARD"],["season","🌟 STANDINGS"],["scorecard","📋 SCORECARDS"],
     ["course","🗺 COURSE"],["register","✍ REGISTER"],
-    ["my-scores-login","✏️ MY SCORES"],["admin","⚙ ADMIN"],
+    ["my-scores-login","✏️ MY SCORES"],["handicap","🏅 HANDICAPS"],["admin","⚙ ADMIN"],
   ];
   const activeNav = screen==="my-scores"?"my-scores-login":screen;
 
@@ -882,6 +969,7 @@ export default function App() {
         {screen==="my-scores-login" && <MyScoresLogin/>}
         {screen==="my-scores"       && <MyScores/>}
         {screen==="season" && <SeasonStandings players={players} adminUnlocked={adminUnlocked} />}
+        {screen==="handicap" && <HandicapTracker players={players} adminUnlocked={adminUnlocked} onHandicapUpdate={(pid,hcp)=>setPlayers(prev=>prev.map(p=>p.id===pid?{...p,handicap:hcp}:p))} />}
         {screen==="admin"           && <AdminView/>}
       </div>
     </div>
