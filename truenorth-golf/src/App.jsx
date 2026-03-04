@@ -148,12 +148,52 @@ function AdminView({ course, players, adminUnlocked, setAdminUnlocked, pinInput,
   pinError, setPinError, savePlayer, removePlayerDb, saveCourse, setCourse, updateField, notify }) {
     const [localCourse, setLocalCourse] = useState(course || {});
     const [saving, setSaving] = useState(false);
-    const [courseKey, setCourseKey] = useState(0); // bumped when course search populates fields
+    const [courseKey, setCourseKey] = useState(0);
+
+    // Refs for text inputs — avoid re-render on type but sync when course selected
+    const nameRef    = React.useRef(null);
+    const cityRef    = React.useRef(null);
+    const slopeRef   = React.useRef(null);
+    const ratingRef  = React.useRef(null);
+    const descRef    = React.useRef(null);
+    const parRefs    = React.useRef(Array.from({length:18}, ()=>React.createRef()));
+    const yardsRefs  = React.useRef(Array.from({length:18}, ()=>React.createRef()));
+
+    // When courseKey changes (new course selected), force-update all input DOM values
+    React.useEffect(() => {
+      if (nameRef.current)   nameRef.current.value   = localCourse.name   || "";
+      if (cityRef.current)   cityRef.current.value   = localCourse.city   || "";
+      if (slopeRef.current)  slopeRef.current.value  = localCourse.slope  || "";
+      if (ratingRef.current) ratingRef.current.value = localCourse.rating || "";
+      if (descRef.current)   descRef.current.value   = localCourse.description || "";
+      const par   = localCourse.par   || DEFAULT_PAR;
+      const yards = localCourse.yards || DEFAULT_YARDS;
+      parRefs.current.forEach((ref, i)   => { if (ref.current) ref.current.value = par[i]   || 4; });
+      yardsRefs.current.forEach((ref, i) => { if (ref.current) ref.current.value = yards[i] || 400; });
+    }, [courseKey]);
+
+    const collectAndSave = async () => {
+      // Read all values directly from DOM refs before saving
+      const par   = parRefs.current.map((ref,i)   => parseInt(ref.current?.value)   || DEFAULT_PAR[i]);
+      const yards = yardsRefs.current.map((ref,i) => parseInt(ref.current?.value)   || DEFAULT_YARDS[i]);
+      const updated = {
+        ...localCourse,
+        name:        nameRef.current?.value   || localCourse.name,
+        city:        cityRef.current?.value   || localCourse.city,
+        slope:       parseInt(slopeRef.current?.value)  || localCourse.slope,
+        rating:      parseFloat(ratingRef.current?.value) || localCourse.rating,
+        description: descRef.current?.value  || localCourse.description,
+        par, yards,
+      };
+      setLocalCourse(updated);
+      return updated;
+    };
 
     const saveAll = async () => {
       setSaving(true);
-      await saveCourse(localCourse);
-      setCourse(localCourse);
+      const updated = await collectAndSave();
+      await saveCourse(updated);
+      setCourse(updated);
       setSaving(false);
       notify("Course saved!");
     };
@@ -197,12 +237,11 @@ function AdminView({ course, players, adminUnlocked, setAdminUnlocked, pinInput,
               <div style={{fontSize:10,color:"var(--text3)",letterSpacing:1,marginBottom:4}}>SEARCH MINNESOTA COURSES</div>
               <CourseSearch onSelect={c=>{ setLocalCourse(prev=>({...prev,name:c.name,city:c.city,slope:c.slope,rating:c.rating,par:c.par||DEFAULT_PAR,yards:c.yards||DEFAULT_YARDS})); setCourseKey(k=>k+1); }}/>
             </div>
-            {[["Course Name","name"],["City / State","city"],["Slope Rating","slope"],["Course Rating","rating"]].map(([lbl,key])=>(
+            {[["Course Name","name",nameRef],["City / State","city",cityRef],["Slope Rating","slope",slopeRef],["Course Rating","rating",ratingRef]].map(([lbl,key,ref])=>(
               <div key={key}>
                 <div style={{fontSize:10,color:"var(--text3)",letterSpacing:1,marginBottom:4}}>{lbl.toUpperCase()}</div>
-                <input defaultValue={localCourse[key]??""} key={"course-"+key+"-"+courseKey} type={key==="slope"||key==="rating"?"number":"text"}
+                <input ref={ref} defaultValue={localCourse[key]??""} type={key==="slope"||key==="rating"?"number":"text"}
                   step={key==="rating"?".1":undefined}
-                  onBlur={e=>setLocalCourse(c=>({...c,[key]:key==="slope"?parseInt(e.target.value)||0:key==="rating"?parseFloat(e.target.value)||0:e.target.value}))}
                   style={{width:"100%"}}/>
               </div>
             ))}
@@ -215,9 +254,8 @@ function AdminView({ course, players, adminUnlocked, setAdminUnlocked, pinInput,
               {Array.from({length:18},(_,i)=>(
                 <div key={i} style={{textAlign:"center"}}>
                   <div style={{fontSize:9,color:"var(--text3)",marginBottom:2}}>{i+1}</div>
-                  <input type="number" min="3" max="6" defaultValue={(localCourse.par||DEFAULT_PAR)[i]}
-                    key={"par-"+i+"-"+courseKey}
-                    onBlur={e=>{ const p=[...(localCourse.par||DEFAULT_PAR)]; p[i]=parseInt(e.target.value)||4; setLocalCourse(c=>({...c,par:p})); }}
+                  <input ref={parRefs.current[i]} type="number" min="3" max="6"
+                    defaultValue={(localCourse.par||DEFAULT_PAR)[i]}
                     style={{width:40,textAlign:"center",padding:"4px 2px"}}/>
                 </div>
               ))}
@@ -231,9 +269,8 @@ function AdminView({ course, players, adminUnlocked, setAdminUnlocked, pinInput,
               {Array.from({length:18},(_,i)=>(
                 <div key={i} style={{textAlign:"center"}}>
                   <div style={{fontSize:9,color:"var(--text3)",marginBottom:2}}>{i+1}</div>
-                  <input type="number" min="100" max="700" defaultValue={(localCourse.yards||DEFAULT_YARDS)[i]}
-                    key={"yard-"+i+"-"+courseKey}
-                    onBlur={e=>{ const y=[...(localCourse.yards||DEFAULT_YARDS)]; y[i]=parseInt(e.target.value)||400; setLocalCourse(c=>({...c,yards:y})); }}
+                  <input ref={yardsRefs.current[i]} type="number" min="100" max="700"
+                    defaultValue={(localCourse.yards||DEFAULT_YARDS)[i]}
                     style={{width:52,textAlign:"center",padding:"4px 2px"}}/>
                 </div>
               ))}
@@ -242,7 +279,7 @@ function AdminView({ course, players, adminUnlocked, setAdminUnlocked, pinInput,
 
           <div style={{marginBottom:16}}>
             <div style={{fontSize:10,color:"var(--text3)",letterSpacing:1,marginBottom:4}}>DESCRIPTION</div>
-            <textarea defaultValue={localCourse.description??""} key={"course-desc-"+courseKey} onBlur={e=>setLocalCourse(c=>({...c,description:e.target.value}))} rows={3} style={{width:"100%",resize:"vertical"}}/>
+            <textarea ref={descRef} defaultValue={localCourse.description??""} rows={3} style={{width:"100%",resize:"vertical"}}/>
           </div>
 
           <button className="btn-gold" onClick={saveAll} disabled={saving} style={{fontSize:13}}>
