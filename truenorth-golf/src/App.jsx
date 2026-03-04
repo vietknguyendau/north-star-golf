@@ -591,11 +591,23 @@ export default function App() {
             <tbody>
               <tr>
                 <td style={{padding:"8px 10px",fontSize:13,color:"var(--text2)"}}>{player.name.split(" ")[0]}</td>
-                {scores.map((s,i)=>(
-                  <td key={i} style={{textAlign:"center",padding:"6px 3px"}}>
-                    <input className="sc-input" type="number" min="1" max="15" value={s??""} onChange={e=>updateScore(player.id,start+i,e.target.value)}/>
-                  </td>
-                ))}
+                {scores.map((s,i)=>{
+                  const par=ninePars[i];
+                  const diff=s?s-par:null;
+                  const bg=diff===null?"transparent":diff<=-2?"#1a3a0a":diff===-1?"#0a2a0a":diff===0?"transparent":diff===1?"#2a1a0a":"#3a0a0a";
+                  const col=diff===null?"var(--text3)":diff<=-2?"#a0e060":diff===-1?"var(--green-bright)":diff===0?"var(--text)":diff===1?"var(--amber)":"var(--red)";
+                  return (
+                    <td key={i} style={{textAlign:"center",padding:"6px 3px"}}>
+                      {adminUnlocked ? (
+                        <input className="sc-input" type="number" min="1" max="15" value={s??""} onChange={e=>updateScore(player.id,start+i,e.target.value)}/>
+                      ) : (
+                        <div style={{width:36,height:28,display:"flex",alignItems:"center",justifyContent:"center",margin:"0 auto",borderRadius:3,background:bg,color:col,fontSize:14,fontFamily:"'DM Mono'",fontWeight:s?600:400}}>
+                          {s||"—"}
+                        </div>
+                      )}
+                    </td>
+                  );
+                })}
                 <td style={{textAlign:"center",fontWeight:700,fontSize:15,color:"var(--text)",background:"var(--bg4)",padding:"6px 8px"}}>{gross||"—"}</td>
               </tr>
             </tbody>
@@ -874,9 +886,11 @@ export default function App() {
   // ══════════════════════════════════════════════════════════════════════════
   // MY SCORES — mobile entry
   const MyScores = () => {
-    if (!activePlayer) return null;
+    if (!activePlayer) { setScreen("my-scores-login"); return null; }
     const player = players.find(p=>p.id===activePlayer.id);
-    if (!player) return null;
+    if (!player) { setScreen("my-scores-login"); return null; }
+    // Extra guard: activePlayer must match a real player and must have authenticated via PIN
+    // (activePlayer is only set after successful PIN entry in MyScoresLogin)
 
     const s    = player.scores[activeHole];
     const par  = pars[activeHole];
@@ -891,6 +905,10 @@ export default function App() {
           <div style={{fontFamily:"'Bebas Neue'",fontSize:11,letterSpacing:4,color:"var(--green)",marginBottom:4}}>SCORE ENTRY</div>
           <div style={{fontFamily:"'Bebas Neue'",fontSize:26,letterSpacing:2}}>{player.name}</div>
           <div style={{fontSize:12,color:"var(--text3)"}}>HCP {player.handicap} · {player.flight}</div>
+          <button onClick={()=>{ setActivePlayer(null); setScreen("my-scores-login"); }}
+            style={{marginTop:10,padding:"5px 14px",fontSize:11,fontFamily:"'Bebas Neue'",letterSpacing:1,background:"transparent",border:"1px solid #3a1010",color:"var(--red)",borderRadius:3,cursor:"pointer"}}>
+            🔒 LOCK &amp; EXIT
+          </button>
         </div>
 
         <div className="section-label">── SELECT HOLE</div>
