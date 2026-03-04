@@ -148,6 +148,7 @@ function AdminView({ course, players, adminUnlocked, setAdminUnlocked, pinInput,
   pinError, setPinError, savePlayer, removePlayerDb, saveCourse, setCourse, updateField, notify }) {
     const [localCourse, setLocalCourse] = useState(course || {});
     const [saving, setSaving] = useState(false);
+    const [courseKey, setCourseKey] = useState(0); // bumped when course search populates fields
 
     const saveAll = async () => {
       setSaving(true);
@@ -194,12 +195,12 @@ function AdminView({ course, players, adminUnlocked, setAdminUnlocked, pinInput,
             {/* Course search */}
             <div style={{gridColumn:"1/-1"}}>
               <div style={{fontSize:10,color:"var(--text3)",letterSpacing:1,marginBottom:4}}>SEARCH MINNESOTA COURSES</div>
-              <CourseSearch onSelect={c=>setLocalCourse(prev=>({...prev,name:c.name,city:c.city,slope:c.slope,rating:c.rating,par:c.par||DEFAULT_PAR}))}/>
+              <CourseSearch onSelect={c=>{ setLocalCourse(prev=>({...prev,name:c.name,city:c.city,slope:c.slope,rating:c.rating,par:c.par||DEFAULT_PAR,yards:c.yards||DEFAULT_YARDS})); setCourseKey(k=>k+1); }}/>
             </div>
             {[["Course Name","name"],["City / State","city"],["Slope Rating","slope"],["Course Rating","rating"]].map(([lbl,key])=>(
               <div key={key}>
                 <div style={{fontSize:10,color:"var(--text3)",letterSpacing:1,marginBottom:4}}>{lbl.toUpperCase()}</div>
-                <input defaultValue={localCourse[key]??""} key={"course-"+key} type={key==="slope"||key==="rating"?"number":"text"}
+                <input defaultValue={localCourse[key]??""} key={"course-"+key+"-"+courseKey} type={key==="slope"||key==="rating"?"number":"text"}
                   step={key==="rating"?".1":undefined}
                   onBlur={e=>setLocalCourse(c=>({...c,[key]:key==="slope"?parseInt(e.target.value)||0:key==="rating"?parseFloat(e.target.value)||0:e.target.value}))}
                   style={{width:"100%"}}/>
@@ -215,7 +216,7 @@ function AdminView({ course, players, adminUnlocked, setAdminUnlocked, pinInput,
                 <div key={i} style={{textAlign:"center"}}>
                   <div style={{fontSize:9,color:"var(--text3)",marginBottom:2}}>{i+1}</div>
                   <input type="number" min="3" max="6" defaultValue={(localCourse.par||DEFAULT_PAR)[i]}
-                    key={"par-"+i}
+                    key={"par-"+i+"-"+courseKey}
                     onBlur={e=>{ const p=[...(localCourse.par||DEFAULT_PAR)]; p[i]=parseInt(e.target.value)||4; setLocalCourse(c=>({...c,par:p})); }}
                     style={{width:40,textAlign:"center",padding:"4px 2px"}}/>
                 </div>
@@ -231,7 +232,7 @@ function AdminView({ course, players, adminUnlocked, setAdminUnlocked, pinInput,
                 <div key={i} style={{textAlign:"center"}}>
                   <div style={{fontSize:9,color:"var(--text3)",marginBottom:2}}>{i+1}</div>
                   <input type="number" min="100" max="700" defaultValue={(localCourse.yards||DEFAULT_YARDS)[i]}
-                    key={"yard-"+i}
+                    key={"yard-"+i+"-"+courseKey}
                     onBlur={e=>{ const y=[...(localCourse.yards||DEFAULT_YARDS)]; y[i]=parseInt(e.target.value)||400; setLocalCourse(c=>({...c,yards:y})); }}
                     style={{width:52,textAlign:"center",padding:"4px 2px"}}/>
                 </div>
@@ -241,7 +242,7 @@ function AdminView({ course, players, adminUnlocked, setAdminUnlocked, pinInput,
 
           <div style={{marginBottom:16}}>
             <div style={{fontSize:10,color:"var(--text3)",letterSpacing:1,marginBottom:4}}>DESCRIPTION</div>
-            <textarea defaultValue={localCourse.description??""} key="course-desc" onBlur={e=>setLocalCourse(c=>({...c,description:e.target.value}))} rows={3} style={{width:"100%",resize:"vertical"}}/>
+            <textarea defaultValue={localCourse.description??""} key={"course-desc-"+courseKey} onBlur={e=>setLocalCourse(c=>({...c,description:e.target.value}))} rows={3} style={{width:"100%",resize:"vertical"}}/>
           </div>
 
           <button className="btn-gold" onClick={saveAll} disabled={saving} style={{fontSize:13}}>
