@@ -1,4 +1,5 @@
 import { useState, useRef, useEffect } from "react";
+import SeasonStandings from "./Season";
 import { db } from "./firebase";
 import {
   doc, collection, onSnapshot, setDoc, updateDoc, deleteDoc, getDoc
@@ -819,7 +820,7 @@ export default function App() {
   // ══════════════════════════════════════════════════════════════════════════
   // ROOT RENDER
   const NAV = [
-    ["leaderboard","🏆 LEADERBOARD"],["scorecard","📋 SCORECARDS"],
+    ["leaderboard","🏆 LEADERBOARD"],["season","🌟 STANDINGS"],["scorecard","📋 SCORECARDS"],
     ["course","🗺 COURSE"],["register","✍ REGISTER"],
     ["my-scores-login","✏️ MY SCORES"],["admin","⚙ ADMIN"],
   ];
@@ -880,6 +881,7 @@ export default function App() {
         {screen==="register"        && <RegisterView/>}
         {screen==="my-scores-login" && <MyScoresLogin/>}
         {screen==="my-scores"       && <MyScores/>}
+        {screen==="season" && <SeasonStandings players={players} adminUnlocked={adminUnlocked} />}
         {screen==="admin"           && <AdminView/>}
       </div>
     </div>
