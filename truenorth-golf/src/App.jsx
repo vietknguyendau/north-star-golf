@@ -369,7 +369,11 @@ export default function App() {
       doc(db, "tournaments", TOURNAMENT_ID, "settings", "course"),
       snap => {
         if (snap.exists()) {
-          setCourse(snap.data());
+          const data = snap.data();
+          // Defensive: ensure par and yards are valid arrays (bad write protection)
+          if (!Array.isArray(data.par) || data.par.length !== 18) data.par = DEFAULT_PAR;
+          if (!Array.isArray(data.yards) || data.yards.length !== 18) data.yards = DEFAULT_YARDS;
+          setCourse(data);
         } else {
           // First run — seed default course
           const defaultCourse = {
@@ -393,8 +397,8 @@ export default function App() {
     setTimeout(() => setNotif(null), 3500);
   };
 
-  const pars      = course?.par   || DEFAULT_PAR;
-  const yards     = course?.yards || DEFAULT_YARDS;
+  const pars  = (Array.isArray(course?.par)   && course.par.length===18)  ? course.par   : DEFAULT_PAR;
+  const yards = (Array.isArray(course?.yards) && course.yards.length===18) ? course.yards : DEFAULT_YARDS;
   const totalPar  = pars.reduce((a,b)=>a+b,0);
 
   // ── Firebase write helpers ──
@@ -417,7 +421,14 @@ export default function App() {
   const saveCourse = async (data) => {
     setSyncStatus("syncing");
     try {
-      await setDoc(doc(db, "tournaments", TOURNAMENT_ID, "settings", "course"), data);
+      // Validate before writing — never save malformed par/yards arrays
+      const safe = { ...data };
+      if (!Array.isArray(safe.par) || safe.par.length !== 18) safe.par = DEFAULT_PAR;
+      if (!Array.isArray(safe.yards) || safe.yards.length !== 18) safe.yards = DEFAULT_YARDS;
+      if (!safe.name) safe.name = "Keller Golf Course";
+      if (!safe.slope || isNaN(safe.slope)) safe.slope = 128;
+      if (!safe.rating || isNaN(safe.rating)) safe.rating = 70.4;
+      await setDoc(doc(db, "tournaments", TOURNAMENT_ID, "settings", "course"), safe);
       setSyncStatus("synced");
     } catch(e) { console.error(e); setSyncStatus("error"); }
   };
