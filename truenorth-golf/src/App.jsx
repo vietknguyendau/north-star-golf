@@ -1,0 +1,887 @@
+import { useState, useRef, useEffect } from "react";
+import { db } from "./firebase";
+import {
+  doc, collection, onSnapshot, setDoc, updateDoc, deleteDoc, getDoc
+} from "firebase/firestore";
+
+// ─── Constants ───────────────────────────────────────────────────────────────
+const FLIGHTS       = ["Championship", "A Flight", "B Flight", "C Flight"];
+const DEFAULT_PAR   = [4,4,3,4,5,3,4,4,5, 4,3,4,5,4,3,4,4,5];
+const DEFAULT_YARDS = [385,412,178,395,520,162,430,388,510, 402,185,415,535,375,160,420,395,525];
+const HCP_STROKES   = [7,1,15,5,9,17,3,13,11, 8,18,4,6,16,14,2,12,10];
+const JOIN_CODE     = "NORTHSTAR24";
+const ADMIN_PIN     = "1234";
+const TOURNAMENT_ID = "tournament-2024"; // change per season/event
+
+// ─── Helpers ─────────────────────────────────────────────────────────────────
+const toPM = v =>
+  v === null || v === undefined || isNaN(v) ? "—"
+  : v === 0 ? "E" : v > 0 ? `+${v}` : `${v}`;
+
+const lastFilledIdx = scores => {
+  let last = -1;
+  scores.forEach((s, i) => { if (s !== null) last = i; });
+  return last;
+};
+
+const calcGrossToPar = (player, pars) => {
+  const last = lastFilledIdx(player.scores);
+  if (last < 0) return null;
+  const gross  = player.scores.slice(0, last+1).filter(s=>s!==null).reduce((a,b)=>a+b,0);
+  const parSum = pars.slice(0, last+1).reduce((a,b)=>a+b,0);
+  return gross - parSum;
+};
+
+const calcNet = (player, pars) => {
+  const last = lastFilledIdx(player.scores);
+  if (last < 0) return null;
+  let hcpStrokes = 0;
+  player.scores.forEach((s, i) => {
+    if (s === null) return;
+    if (HCP_STROKES[i] <= player.handicap) hcpStrokes++;
+    if (player.handicap > 18 && HCP_STROKES[i] <= player.handicap - 18) hcpStrokes++;
+  });
+  const gross  = player.scores.slice(0,last+1).filter(s=>s!==null).reduce((a,b)=>a+b,0);
+  const parSum = pars.slice(0,last+1).reduce((a,b)=>a+b,0);
+  return gross - hcpStrokes - parSum;
+};
+
+const holesPlayed = p => lastFilledIdx(p.scores) + 1;
+
+const scoreLabel = (score, par) => {
+  if (score === null) return "";
+  const d = score - par;
+  if (d <= -2) return "EAGLE";
+  if (d === -1) return "BIRDIE";
+  if (d === 0)  return "PAR";
+  if (d === 1)  return "BOGEY";
+  if (d === 2)  return "DOUBLE BOGEY";
+  return "TRIPLE+";
+};
+
+const scoreClass = (score, par) => {
+  if (score === null) return "";
+  const d = score - par;
+  if (d <= -2) return "s-eagle";
+  if (d === -1) return "s-birdie";
+  if (d === 0)  return "s-par";
+  if (d === 1)  return "s-bogey";
+  return "s-double";
+};
+
+// ─── CSS ─────────────────────────────────────────────────────────────────────
+const CSS = `
+@import url('https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,300;0,400;0,600;1,300;1,400&family=Bebas+Neue&family=DM+Mono:wght@400;500&display=swap');
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0;}
+:root{
+  --bg:#080c08;--bg2:#0c120c;--bg3:#101810;--bg4:#141e14;
+  --border:#1c2a1c;--border2:#243424;
+  --gold:#c8a830;--gold2:#a88020;--gold-dim:#7a6010;
+  --green:#5a9a5a;--green-dim:#3a6a3a;--green-bright:#70c870;
+  --text:#e4dcc8;--text2:#a09880;--text3:#607060;
+  --red:#c04030;--amber:#d07830;
+}
+body{background:var(--bg);color:var(--text);font-family:'Cormorant Garamond',Georgia,serif;}
+::-webkit-scrollbar{width:3px;height:3px;}
+::-webkit-scrollbar-track{background:var(--bg);}
+::-webkit-scrollbar-thumb{background:var(--border2);}
+input,select,textarea{font-family:inherit;background:var(--bg2);border:1px solid var(--border2);color:var(--text);padding:8px 12px;border-radius:3px;outline:none;font-size:14px;transition:border-color .2s;}
+input:focus,select:focus,textarea:focus{border-color:var(--gold);}
+button{cursor:pointer;font-family:'Bebas Neue',sans-serif;letter-spacing:1.5px;border:none;border-radius:3px;transition:all .2s;}
+.btn-gold{background:linear-gradient(135deg,var(--gold),var(--gold2));color:#060a06;padding:10px 24px;font-size:14px;}
+.btn-gold:hover{filter:brightness(1.1);}
+.btn-ghost{background:transparent;border:1px solid var(--border2);color:var(--text2);padding:8px 18px;font-size:13px;}
+.btn-ghost:hover{border-color:var(--green);color:var(--text);}
+.btn-sm{padding:5px 12px;font-size:11px;}
+.btn-danger{background:transparent;border:1px solid #3a1818;color:var(--red);padding:5px 10px;font-size:11px;letter-spacing:1px;}
+.btn-danger:hover{background:#3a181822;}
+.s-eagle{background:var(--gold);color:#060a06;border-radius:50%;width:30px;height:30px;display:flex;align-items:center;justify-content:center;margin:auto;font-weight:700;}
+.s-birdie{border:2px solid var(--gold);color:var(--gold);border-radius:50%;width:30px;height:30px;display:flex;align-items:center;justify-content:center;margin:auto;}
+.s-par{color:var(--text);}
+.s-bogey{color:var(--amber);}
+.s-double{color:var(--red);font-weight:700;}
+.nav-pill{padding:7px 16px;font-family:'Bebas Neue';letter-spacing:2px;font-size:12px;cursor:pointer;border-bottom:2px solid transparent;color:var(--text3);transition:all .2s;white-space:nowrap;}
+.nav-pill.active{color:var(--gold);border-bottom-color:var(--gold);}
+.nav-pill:hover{color:var(--text);}
+.flight-chip{padding:4px 14px;font-size:12px;border:1px solid var(--border);border-radius:20px;color:var(--text3);cursor:pointer;transition:all .2s;background:transparent;font-family:'Bebas Neue';letter-spacing:1px;}
+.flight-chip.active{border-color:var(--green);color:#8ac88a;background:var(--bg3);}
+.player-row{border-bottom:1px solid var(--border);transition:background .15s;cursor:pointer;}
+.player-row:hover{background:var(--bg3);}
+.sc-input{width:36px;background:var(--bg3);border:1px solid var(--border2);color:var(--text);text-align:center;padding:4px 2px;border-radius:3px;font-size:13px;font-family:'DM Mono';}
+.sc-input:focus{border-color:var(--gold);outline:none;}
+.card{background:var(--bg2);border:1px solid var(--border);border-radius:6px;}
+.section-label{font-family:'Bebas Neue';letter-spacing:3px;font-size:11px;color:var(--green);margin-bottom:10px;}
+.upload-zone{border:2px dashed var(--border2);border-radius:8px;padding:40px;text-align:center;cursor:pointer;transition:all .2s;}
+.upload-zone:hover{border-color:var(--gold-dim);background:var(--bg3);}
+.modal-bg{position:fixed;inset:0;background:rgba(0,0,0,.85);display:flex;align-items:center;justify-content:center;z-index:200;backdrop-filter:blur(6px);}
+.notif{position:fixed;top:20px;right:20px;z-index:999;padding:12px 20px;border-radius:4px;font-size:14px;animation:slideIn .3s ease;}
+.notif-success{background:#1a3a1a;border:1px solid var(--green);color:#8ac88a;}
+.notif-error{background:#3a1818;border:1px solid var(--red);color:#e08080;}
+.notif-info{background:#1a1a3a;border:1px solid #5a5a9a;color:#9a9ae0;}
+@keyframes slideIn{from{opacity:0;transform:translateX(20px)}to{opacity:1;transform:translateX(0)}}
+@keyframes fadeUp{from{opacity:0;transform:translateY(12px)}to{opacity:1;transform:translateY(0)}}
+.fade-up{animation:fadeUp .35s ease;}
+.pulse{animation:pulse2 2s infinite;}
+@keyframes pulse2{0%,100%{opacity:1}50%{opacity:.35}}
+.hole-score-btn{border-radius:6px;background:var(--bg3);border:1px solid var(--border2);color:var(--text2);font-family:'DM Mono';font-size:17px;display:flex;align-items:center;justify-content:center;cursor:pointer;transition:all .15s;}
+.hole-score-btn:hover{border-color:var(--gold);color:var(--text);}
+.hole-score-btn.active{border-color:var(--gold);background:var(--bg4);color:var(--gold);}
+.sync-dot{width:7px;height:7px;border-radius:50%;background:var(--green);display:inline-block;}
+.sync-dot.syncing{background:var(--amber);animation:pulse2 0.8s infinite;}
+.sync-dot.error{background:var(--red);}
+`;
+
+// ═════════════════════════════════════════════════════════════════════════════
+export default function App() {
+  // ── Firebase state ──
+  const [players, setPlayers]   = useState([]);
+  const [course, setCourse]     = useState(null);
+  const [loading, setLoading]   = useState(true);
+  const [syncStatus, setSyncStatus] = useState("synced"); // synced | syncing | error
+
+  // ── UI state ──
+  const [screen, setScreen]           = useState("leaderboard");
+  const [activeFlight, setActiveFlight] = useState("All");
+  const [selectedPid, setSelectedPid] = useState(null);
+  const [activePlayer, setActivePlayer] = useState(null);
+  const [activeHole, setActiveHole]   = useState(0);
+  const [regForm, setRegForm]         = useState({ code:"", name:"", handicap:"", flight:"Championship" });
+  const [regError, setRegError]       = useState("");
+  const [regSuccess, setRegSuccess]   = useState(false);
+  const [showScModal, setShowScModal] = useState(false);
+  const [adminUnlocked, setAdminUnlocked] = useState(false);
+  const [pinInput, setPinInput]       = useState("");
+  const [pinError, setPinError]       = useState(false);
+  const [notif, setNotif]             = useState(null);
+  const fileRef = useRef();
+
+  // ── Firestore listeners ──
+  useEffect(() => {
+    // Listen to players collection
+    const unsub1 = onSnapshot(
+      collection(db, "tournaments", TOURNAMENT_ID, "players"),
+      snap => {
+        const data = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+        setPlayers(data);
+        setLoading(false);
+      },
+      err => { console.error(err); setSyncStatus("error"); setLoading(false); }
+    );
+
+    // Listen to course document
+    const unsub2 = onSnapshot(
+      doc(db, "tournaments", TOURNAMENT_ID, "settings", "course"),
+      snap => {
+        if (snap.exists()) {
+          setCourse(snap.data());
+        } else {
+          // First run — seed default course
+          const defaultCourse = {
+            name:"Keller Golf Course", city:"Maplewood, MN", slope:128, rating:70.4,
+            par: DEFAULT_PAR, yards: DEFAULT_YARDS,
+            description:"A classic Minnesota municipal course winding through mature oaks and wetlands. Tight fairways reward accuracy over distance.",
+            scorecardImage: null, scorecardPdf: null,
+          };
+          setDoc(doc(db, "tournaments", TOURNAMENT_ID, "settings", "course"), defaultCourse);
+          setCourse(defaultCourse);
+        }
+        setLoading(false);
+      }
+    );
+
+    return () => { unsub1(); unsub2(); };
+  }, []);
+
+  const notify = (msg, type="success") => {
+    setNotif({ msg, type });
+    setTimeout(() => setNotif(null), 3500);
+  };
+
+  const pars      = course?.par   || DEFAULT_PAR;
+  const yards     = course?.yards || DEFAULT_YARDS;
+  const totalPar  = pars.reduce((a,b)=>a+b,0);
+
+  // ── Firebase write helpers ──
+  const savePlayer = async (player) => {
+    setSyncStatus("syncing");
+    try {
+      await setDoc(doc(db, "tournaments", TOURNAMENT_ID, "players", player.id), player);
+      setSyncStatus("synced");
+    } catch(e) { console.error(e); setSyncStatus("error"); notify("Sync failed — check connection","error"); }
+  };
+
+  const removePlayerDb = async (id) => {
+    setSyncStatus("syncing");
+    try {
+      await deleteDoc(doc(db, "tournaments", TOURNAMENT_ID, "players", id));
+      setSyncStatus("synced");
+    } catch(e) { console.error(e); setSyncStatus("error"); }
+  };
+
+  const saveCourse = async (data) => {
+    setSyncStatus("syncing");
+    try {
+      await setDoc(doc(db, "tournaments", TOURNAMENT_ID, "settings", "course"), data);
+      setSyncStatus("synced");
+    } catch(e) { console.error(e); setSyncStatus("error"); }
+  };
+
+  // ── Player helpers ──
+  const sortedFlight = flight => {
+    const base = flight === "All" ? players : players.filter(p=>p.flight===flight);
+    return [...base].sort((a,b)=>{
+      const an=calcNet(a,pars), bn=calcNet(b,pars);
+      if(an===null&&bn===null)return 0;
+      if(an===null)return 1; if(bn===null)return -1;
+      return an!==bn ? an-bn : holesPlayed(b)-holesPlayed(a);
+    });
+  };
+
+  const updateScore = async (pid, hole, val) => {
+    const player = players.find(p=>p.id===pid);
+    if (!player) return;
+    const scores = [...player.scores];
+    scores[hole] = val === "" ? null : Math.max(1, parseInt(val)||1);
+    const updated = { ...player, scores };
+    // Optimistic local update
+    setPlayers(prev => prev.map(p => p.id===pid ? updated : p));
+    if (activePlayer?.id === pid) setActivePlayer(updated);
+    await savePlayer(updated);
+  };
+
+  const updateField = async (id, field, val) => {
+    const player = players.find(p=>p.id===id);
+    if (!player) return;
+    const updated = { ...player, [field]: field==="handicap" ? parseInt(val)||0 : val };
+    setPlayers(prev => prev.map(p => p.id===id ? updated : p));
+    await savePlayer(updated);
+  };
+
+  const handleRegister = async () => {
+    if (regForm.code.toUpperCase() !== JOIN_CODE) { setRegError("Invalid join code."); return; }
+    if (!regForm.name.trim()) { setRegError("Please enter your name."); return; }
+    if (players.find(p=>p.name.toLowerCase()===regForm.name.trim().toLowerCase())) { setRegError("Name already registered."); return; }
+    const id  = `player-${Date.now()}`;
+    const np  = { id, name:regForm.name.trim(), handicap:parseInt(regForm.handicap)||0, flight:regForm.flight, scores:Array(18).fill(null) };
+    await savePlayer(np);
+    setActivePlayer(np);
+    setRegSuccess(true);
+    notify(`Welcome, ${np.name}! 🏌️`);
+  };
+
+  const handleFileUpload = e => {
+    const file = e.target.files[0]; if (!file) return;
+    // Note: for production, upload to Firebase Storage instead of base64
+    const reader = new FileReader();
+    reader.onload = async ev => {
+      const url   = ev.target.result;
+      const isPdf = file.type.includes("pdf");
+      const updated = { ...course, scorecardImage:isPdf?null:url, scorecardPdf:isPdf?url:null, scorecardName:file.name };
+      setCourse(updated);
+      await saveCourse(updated);
+      notify("Scorecard uploaded!");
+    };
+    reader.readAsDataURL(file);
+  };
+
+  const flightTabs = ["All", ...FLIGHTS.filter(f=>players.some(p=>p.flight===f))];
+
+  if (loading) return (
+    <div style={{minHeight:"100vh",background:"#080c08",display:"flex",alignItems:"center",justifyContent:"center",flexDirection:"column",gap:16}}>
+      <style>{CSS}</style>
+      <div style={{fontFamily:"'Bebas Neue',sans-serif",fontSize:13,letterSpacing:4,color:"#5a9a5a"}} className="pulse">LOADING TOURNAMENT DATA…</div>
+    </div>
+  );
+
+  // ══════════════════════════════════════════════════════════════════════════
+  // LEADERBOARD
+  const Leaderboard = () => (
+    <div className="fade-up">
+      <div style={{display:"flex",gap:8,marginBottom:20,flexWrap:"wrap"}}>
+        {flightTabs.map(f=>(
+          <button key={f} className={`flight-chip ${activeFlight===f?"active":""}`} onClick={()=>setActiveFlight(f)}>{f}</button>
+        ))}
+      </div>
+      {(activeFlight==="All" ? FLIGHTS.filter(f=>players.some(p=>p.flight===f)) : [activeFlight]).map(flight=>{
+        const fp = sortedFlight(flight);
+        if (!fp.length) return null;
+        return (
+          <div key={flight} style={{marginBottom:32}}>
+            <div className="section-label">── {flight}</div>
+            <div className="card" style={{overflow:"hidden"}}>
+              <div style={{display:"grid",gridTemplateColumns:"52px 1fr 70px 80px 80px 60px",background:"var(--bg3)",padding:"9px 16px",fontSize:10,letterSpacing:2,color:"var(--text3)",fontFamily:"'Bebas Neue'"}}>
+                <span>POS</span><span>PLAYER</span><span style={{textAlign:"center"}}>THRU</span><span style={{textAlign:"center"}}>GROSS</span><span style={{textAlign:"center"}}>NET</span><span style={{textAlign:"center"}}>HCP</span>
+              </div>
+              {fp.map((player,idx)=>{
+                const net=calcNet(player,pars), gross=calcGrossToPar(player,pars), thru=holesPlayed(player);
+                const lead=idx===0&&net!==null;
+                return (
+                  <div key={player.id} className="player-row"
+                    style={{display:"grid",gridTemplateColumns:"52px 1fr 70px 80px 80px 60px",padding:"13px 16px",alignItems:"center",
+                      borderLeft:lead?"3px solid var(--gold)":"3px solid transparent"}}
+                    onClick={()=>{ setSelectedPid(player.id); setScreen("scorecard"); }}>
+                    <span style={{fontFamily:"'Bebas Neue'",fontSize:20,color:idx===0?"var(--gold)":idx===1?"#90b0b8":idx===2?"#c08050":"var(--text3)"}}>
+                      {idx===0?"1ST":idx===1?"2ND":idx===2?"3RD":`${idx+1}`}
+                    </span>
+                    <div>
+                      <div style={{fontSize:17,color:lead?"var(--text)":"var(--text2)",fontWeight:600}}>{player.name}</div>
+                      <div style={{fontSize:11,color:"var(--text3)",letterSpacing:1}}>{player.flight}</div>
+                    </div>
+                    <div style={{textAlign:"center"}}>
+                      <div style={{fontSize:15,color:thru===18?"var(--green)":"var(--text)"}}>{thru===18?"F":thru||"—"}</div>
+                      <div style={{fontSize:10,color:"var(--text3)",letterSpacing:1}}>{thru===18?"FINAL":thru>0?"THRU":"—"}</div>
+                    </div>
+                    <div style={{textAlign:"center",fontSize:17,color:gross>0?"var(--amber)":gross<0?"var(--gold)":"var(--text)"}}>{toPM(gross)}</div>
+                    <div style={{textAlign:"center",fontSize:22,fontWeight:700,color:net<0?"var(--green-bright)":net>0?"var(--amber)":"var(--text)"}}>{toPM(net)}</div>
+                    <div style={{textAlign:"center",fontSize:13,color:"var(--text3)"}}>{player.handicap}</div>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        );
+      })}
+      {players.length===0 && (
+        <div style={{textAlign:"center",padding:"60px 20px",color:"var(--text3)"}}>
+          <div style={{fontSize:36,marginBottom:12}}>⛳</div>
+          <div style={{fontFamily:"'Bebas Neue'",fontSize:18,letterSpacing:2,marginBottom:8}}>NO PLAYERS YET</div>
+          <div style={{fontSize:14}}>Share join code <strong style={{color:"var(--gold)"}}>{JOIN_CODE}</strong> with your group</div>
+        </div>
+      )}
+    </div>
+  );
+
+  // ══════════════════════════════════════════════════════════════════════════
+  // SCORECARD VIEW
+  const ScorecardView = () => {
+    const player = players.find(p=>p.id===selectedPid) || players[0];
+    if (!player) return <div style={{color:"var(--text3)",padding:40,textAlign:"center"}}>No players yet.</div>;
+
+    const Nine = ({ start, label }) => {
+      const ninePars  = pars.slice(start,start+9);
+      const nineYards = yards.slice(start,start+9);
+      const nineHcps  = HCP_STROKES.slice(start,start+9);
+      const scores    = player.scores.slice(start,start+9);
+      const gross     = scores.filter(Boolean).reduce((a,b)=>a+b,0);
+      return (
+        <div style={{overflowX:"auto",marginBottom:16}}>
+          <div className="section-label" style={{marginBottom:6}}>{label}</div>
+          <table style={{borderCollapse:"collapse",minWidth:"100%",fontSize:13}}>
+            <thead>
+              <tr style={{background:"var(--bg3)"}}>
+                <td style={{padding:"7px 10px",fontSize:10,letterSpacing:1,color:"var(--text3)",fontFamily:"'Bebas Neue'",minWidth:70}}>HOLE</td>
+                {Array.from({length:9},(_,i)=>(
+                  <td key={i} style={{padding:"7px 5px",textAlign:"center",fontSize:11,color:"var(--text3)",fontFamily:"'Bebas Neue'",minWidth:38}}>{start+i+1}</td>
+                ))}
+                <td style={{padding:"7px 8px",textAlign:"center",fontSize:11,color:"var(--text3)",fontFamily:"'Bebas Neue'",background:"var(--bg4)",minWidth:42}}>TOT</td>
+              </tr>
+              <tr style={{borderBottom:"1px solid var(--border)"}}>
+                <td style={{padding:"5px 10px",fontSize:11,color:"var(--text3)"}}>Yards</td>
+                {nineYards.map((y,i)=><td key={i} style={{textAlign:"center",padding:"5px 4px",fontSize:12,color:"var(--text3)"}}>{y}</td>)}
+                <td style={{textAlign:"center",fontSize:12,color:"var(--text3)",background:"var(--bg4)"}}>{nineYards.reduce((a,b)=>a+b,0)}</td>
+              </tr>
+              <tr style={{borderBottom:"1px solid var(--border)"}}>
+                <td style={{padding:"5px 10px",fontSize:11,color:"var(--text3)"}}>HCP</td>
+                {nineHcps.map((h,i)=><td key={i} style={{textAlign:"center",padding:"5px 4px",fontSize:11,color:"var(--text3)"}}>{h}</td>)}
+                <td style={{background:"var(--bg4)"}}/>
+              </tr>
+              <tr style={{borderBottom:"1px solid var(--border)"}}>
+                <td style={{padding:"6px 10px",fontSize:12,color:"var(--green)",fontWeight:600}}>Par</td>
+                {ninePars.map((p,i)=><td key={i} style={{textAlign:"center",padding:"6px 4px",fontSize:13,color:"var(--green)",fontWeight:600}}>{p}</td>)}
+                <td style={{textAlign:"center",fontSize:13,color:"var(--green)",fontWeight:700,background:"var(--bg4)"}}>{ninePars.reduce((a,b)=>a+b,0)}</td>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td style={{padding:"8px 10px",fontSize:13,color:"var(--text2)"}}>{player.name.split(" ")[0]}</td>
+                {scores.map((s,i)=>(
+                  <td key={i} style={{textAlign:"center",padding:"6px 3px"}}>
+                    <input className="sc-input" type="number" min="1" max="15" value={s??""} onChange={e=>updateScore(player.id,start+i,e.target.value)}/>
+                  </td>
+                ))}
+                <td style={{textAlign:"center",fontWeight:700,fontSize:15,color:"var(--text)",background:"var(--bg4)",padding:"6px 8px"}}>{gross||"—"}</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      );
+    };
+
+    const net=calcNet(player,pars), gross=player.scores.filter(Boolean).reduce((a,b)=>a+b,0), thru=holesPlayed(player);
+    return (
+      <div className="fade-up">
+        <div style={{display:"flex",gap:6,marginBottom:20,flexWrap:"wrap"}}>
+          {players.map(p=>(
+            <button key={p.id} className={`flight-chip ${selectedPid===p.id?"active":""}`} style={{fontSize:13}} onClick={()=>setSelectedPid(p.id)}>
+              {p.name.split(" ")[0]}
+            </button>
+          ))}
+        </div>
+        <div className="card" style={{padding:20}}>
+          <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:24,flexWrap:"wrap",gap:16}}>
+            <div>
+              <h2 style={{fontFamily:"'Bebas Neue'",fontSize:30,letterSpacing:2}}>{player.name}</h2>
+              <div style={{fontSize:12,color:"var(--text3)",letterSpacing:1}}>{player.flight} · Handicap {player.handicap}</div>
+            </div>
+            <div style={{display:"flex",gap:24}}>
+              {[["GROSS",gross||"—","var(--text)"],["THRU",thru===18?"F":thru||"—",thru===18?"var(--green)":"var(--text2)"],["NET",toPM(net),net<0?"var(--green-bright)":net>0?"var(--amber)":"var(--text)"]].map(([l,v,c])=>(
+                <div key={l} style={{textAlign:"center"}}>
+                  <div style={{fontSize:24,fontWeight:700,color:c}}>{v}</div>
+                  <div style={{fontSize:10,color:"var(--text3)",letterSpacing:2,fontFamily:"'Bebas Neue'"}}>{l}</div>
+                </div>
+              ))}
+            </div>
+          </div>
+          <Nine start={0} label="FRONT NINE"/>
+          <Nine start={9} label="BACK NINE"/>
+        </div>
+      </div>
+    );
+  };
+
+  // ══════════════════════════════════════════════════════════════════════════
+  // COURSE VIEW
+  const CourseView = () => (
+    <div className="fade-up" style={{maxWidth:820}}>
+      <div className="section-label">── COURSE INFORMATION</div>
+      <div className="card" style={{padding:24,marginBottom:24}}>
+        <div style={{display:"flex",justifyContent:"space-between",flexWrap:"wrap",gap:16,marginBottom:20}}>
+          <div>
+            <h2 style={{fontFamily:"'Bebas Neue'",fontSize:32,letterSpacing:2}}>{course?.name}</h2>
+            <div style={{fontSize:14,color:"var(--text3)"}}>{course?.city}</div>
+          </div>
+          <div style={{display:"flex",gap:28}}>
+            {[["PAR",totalPar,"var(--green)"],["SLOPE",course?.slope,"var(--text)"],["RATING",course?.rating,"var(--gold)"]].map(([l,v,c])=>(
+              <div key={l} style={{textAlign:"center"}}>
+                <div style={{fontFamily:"'Bebas Neue'",fontSize:28,color:c}}>{v}</div>
+                <div style={{fontSize:10,letterSpacing:2,color:"var(--text3)",fontFamily:"'Bebas Neue'"}}>{l}</div>
+              </div>
+            ))}
+          </div>
+        </div>
+        <p style={{fontSize:15,color:"var(--text2)",lineHeight:1.8,fontStyle:"italic",borderLeft:"2px solid var(--gold-dim)",paddingLeft:16}}>{course?.description}</p>
+      </div>
+
+      <div className="section-label">── HOLE-BY-HOLE</div>
+      <div className="card" style={{overflow:"hidden",marginBottom:24}}>
+        {[{start:0,label:"FRONT NINE"},{start:9,label:"BACK NINE"}].map(({start,label})=>(
+          <div key={label} style={{overflowX:"auto",padding:"16px 16px 12px",borderBottom:"1px solid var(--border)"}}>
+            <div style={{fontFamily:"'Bebas Neue'",letterSpacing:2,fontSize:11,color:"var(--green-dim)",marginBottom:8}}>{label}</div>
+            <table style={{borderCollapse:"collapse",fontSize:12,width:"100%"}}>
+              <thead>
+                <tr style={{color:"var(--text3)",fontFamily:"'Bebas Neue'",letterSpacing:1,fontSize:10}}>
+                  <td style={{padding:"4px 8px",minWidth:60}}>HOLE</td>
+                  {Array.from({length:9},(_,i)=><td key={i} style={{textAlign:"center",padding:"4px 5px",minWidth:36}}>{start+i+1}</td>)}
+                  <td style={{textAlign:"center",padding:"4px 8px",background:"var(--bg3)",minWidth:40}}>TOT</td>
+                </tr>
+              </thead>
+              <tbody>
+                <tr style={{color:"var(--text3)",fontSize:12}}>
+                  <td style={{padding:"4px 8px"}}>Yards</td>
+                  {yards.slice(start,start+9).map((y,i)=><td key={i} style={{textAlign:"center",padding:"4px 5px"}}>{y}</td>)}
+                  <td style={{textAlign:"center",background:"var(--bg3)",fontWeight:600}}>{yards.slice(start,start+9).reduce((a,b)=>a+b,0)}</td>
+                </tr>
+                <tr style={{color:"var(--text3)",fontSize:11}}>
+                  <td style={{padding:"4px 8px"}}>HCP</td>
+                  {HCP_STROKES.slice(start,start+9).map((h,i)=><td key={i} style={{textAlign:"center",padding:"4px 5px"}}>{h}</td>)}
+                  <td style={{background:"var(--bg3)"}}/>
+                </tr>
+                <tr style={{color:"var(--green)"}}>
+                  <td style={{padding:"5px 8px",fontWeight:600,fontSize:13}}>Par</td>
+                  {pars.slice(start,start+9).map((p,i)=><td key={i} style={{textAlign:"center",padding:"5px 5px",fontWeight:600,fontSize:14}}>{p}</td>)}
+                  <td style={{textAlign:"center",fontWeight:700,background:"var(--bg3)",fontSize:14}}>{pars.slice(start,start+9).reduce((a,b)=>a+b,0)}</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        ))}
+      </div>
+
+      <div className="section-label">── OFFICIAL SCORECARD</div>
+      <div className="card" style={{padding:20}}>
+        {course?.scorecardImage || course?.scorecardPdf ? (
+          <div>
+            <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:12}}>
+              <span style={{fontSize:14,color:"var(--text2)"}}>📄 {course.scorecardName||"Scorecard"}</span>
+              <div style={{display:"flex",gap:8}}>
+                <button className="btn-ghost btn-sm" onClick={()=>setShowScModal(true)}>View Full</button>
+                <button className="btn-danger btn-sm" onClick={async()=>{ const u={...course,scorecardImage:null,scorecardPdf:null}; setCourse(u); await saveCourse(u); }}>Remove</button>
+              </div>
+            </div>
+            {course.scorecardImage && <img src={course.scorecardImage} alt="Scorecard" style={{width:"100%",maxHeight:280,objectFit:"contain",borderRadius:4,border:"1px solid var(--border)",cursor:"pointer"}} onClick={()=>setShowScModal(true)}/>}
+            {course.scorecardPdf && <div style={{textAlign:"center",padding:24,background:"var(--bg3)",borderRadius:4}}><div style={{fontSize:32,marginBottom:8}}>📋</div><div style={{fontSize:13,color:"var(--text2)",marginBottom:10}}>PDF: {course.scorecardName}</div><button className="btn-ghost btn-sm" onClick={()=>setShowScModal(true)}>Open PDF</button></div>}
+          </div>
+        ) : (
+          <>
+            <div className="upload-zone" onClick={()=>fileRef.current.click()}>
+              <div style={{fontSize:36,marginBottom:12}}>⛳</div>
+              <div style={{fontSize:16,color:"var(--text2)",marginBottom:6}}>Upload Course Scorecard</div>
+              <div style={{fontSize:12,color:"var(--text3)"}}>JPG · PNG · PDF · Click to browse</div>
+            </div>
+            <button className="btn-ghost btn-sm" style={{marginTop:12}} onClick={()=>fileRef.current.click()}>+ Upload File</button>
+          </>
+        )}
+        <input ref={fileRef} type="file" accept="image/*,.pdf" style={{display:"none"}} onChange={handleFileUpload}/>
+      </div>
+    </div>
+  );
+
+  // ══════════════════════════════════════════════════════════════════════════
+  // REGISTER
+  const RegisterView = () => (
+    <div className="fade-up" style={{maxWidth:460,margin:"0 auto"}}>
+      {!regSuccess ? (
+        <>
+          <div style={{textAlign:"center",marginBottom:28}}>
+            <div style={{fontFamily:"'Bebas Neue'",fontSize:13,letterSpacing:4,color:"var(--green)",marginBottom:8}}>JOIN THE TOURNAMENT</div>
+            <h2 style={{fontFamily:"'Bebas Neue'",fontSize:32,letterSpacing:2}}>PLAYER REGISTRATION</h2>
+            <p style={{fontSize:14,color:"var(--text2)",marginTop:8,lineHeight:1.7}}>Get the join code from your commissioner, then fill in your details.</p>
+          </div>
+          <div className="card" style={{padding:28}}>
+            <div style={{display:"flex",flexDirection:"column",gap:16}}>
+              <div>
+                <div className="section-label">JOIN CODE</div>
+                <input value={regForm.code} onChange={e=>setRegForm(f=>({...f,code:e.target.value.toUpperCase()}))} placeholder="e.g. NORTHSTAR24" style={{width:"100%",letterSpacing:3,fontFamily:"'Bebas Neue'",fontSize:18,textAlign:"center"}}/>
+              </div>
+              <div>
+                <div className="section-label">FULL NAME</div>
+                <input value={regForm.name} onChange={e=>setRegForm(f=>({...f,name:e.target.value}))} placeholder="First Last" style={{width:"100%"}}/>
+              </div>
+              <div style={{display:"flex",gap:12}}>
+                <div style={{flex:1}}>
+                  <div className="section-label">HANDICAP</div>
+                  <input type="number" value={regForm.handicap} onChange={e=>setRegForm(f=>({...f,handicap:e.target.value}))} placeholder="0" min="0" max="54" style={{width:"100%"}}/>
+                </div>
+                <div style={{flex:2}}>
+                  <div className="section-label">FLIGHT</div>
+                  <select value={regForm.flight} onChange={e=>setRegForm(f=>({...f,flight:e.target.value}))} style={{width:"100%"}}>
+                    {FLIGHTS.map(f=><option key={f}>{f}</option>)}
+                  </select>
+                </div>
+              </div>
+              {regError && <div style={{fontSize:13,color:"var(--red)",background:"#2a0808",border:"1px solid #4a1010",padding:"10px 14px",borderRadius:4}}>{regError}</div>}
+              <button className="btn-gold" style={{width:"100%",padding:13,fontSize:15,marginTop:4}} onClick={handleRegister}>REGISTER &amp; JOIN →</button>
+            </div>
+          </div>
+          <div style={{textAlign:"center",marginTop:16,fontSize:13,color:"var(--text3)"}}>
+            Already registered? <span style={{color:"var(--gold)",cursor:"pointer"}} onClick={()=>setScreen("my-scores-login")}>Enter scores →</span>
+          </div>
+        </>
+      ) : (
+        <div style={{textAlign:"center",paddingTop:40}}>
+          <div style={{fontSize:52,marginBottom:16}}>🏌️</div>
+          <div style={{fontFamily:"'Bebas Neue'",fontSize:36,letterSpacing:2,color:"var(--gold)",marginBottom:10}}>YOU'RE IN!</div>
+          <p style={{fontSize:16,color:"var(--text2)",marginBottom:28,lineHeight:1.8}}>Welcome, <strong>{activePlayer?.name}</strong>. Good luck out there.</p>
+          <button className="btn-gold" style={{padding:"12px 32px",fontSize:14}} onClick={()=>setScreen("my-scores")}>START ENTERING SCORES →</button>
+        </div>
+      )}
+    </div>
+  );
+
+  // ══════════════════════════════════════════════════════════════════════════
+  // MY SCORES LOGIN
+  const MyScoresLogin = () => (
+    <div className="fade-up" style={{maxWidth:460,margin:"0 auto"}}>
+      <div style={{textAlign:"center",marginBottom:24}}>
+        <div style={{fontFamily:"'Bebas Neue'",fontSize:13,letterSpacing:4,color:"var(--green)",marginBottom:6}}>SCORE ENTRY</div>
+        <h2 style={{fontFamily:"'Bebas Neue'",fontSize:28,letterSpacing:2}}>WHO ARE YOU?</h2>
+      </div>
+      <div className="card" style={{overflow:"hidden"}}>
+        {players.length === 0 && <div style={{padding:32,textAlign:"center",color:"var(--text3)",fontSize:14}}>No players registered yet.<br/>Register first using your join code.</div>}
+        {players.map(p=>(
+          <div key={p.id} className="player-row" style={{padding:"14px 20px",display:"flex",justifyContent:"space-between",alignItems:"center"}}
+            onClick={()=>{ setActivePlayer(p); setActiveHole(Math.max(0,holesPlayed(p)-1)||0); setScreen("my-scores"); }}>
+            <div>
+              <div style={{fontSize:17,fontWeight:600}}>{p.name}</div>
+              <div style={{fontSize:12,color:"var(--text3)"}}>{p.flight} · HCP {p.handicap} · Thru {holesPlayed(p)||"—"}</div>
+            </div>
+            <span style={{color:"var(--gold)",fontSize:12,fontFamily:"'Bebas Neue'",letterSpacing:1}}>SELECT →</span>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+
+  // ══════════════════════════════════════════════════════════════════════════
+  // MY SCORES — mobile entry
+  const MyScores = () => {
+    if (!activePlayer) return null;
+    const player = players.find(p=>p.id===activePlayer.id);
+    if (!player) return null;
+
+    const s    = player.scores[activeHole];
+    const par  = pars[activeHole];
+    const diff = s !== null ? s - par : null;
+    const scColor = diff===null?"var(--text3)":diff<=-1?"var(--gold)":diff===0?"var(--green)":diff===1?"var(--amber)":"var(--red)";
+    const scBg    = diff===null?"var(--bg3)":diff<=-1?"#1c1600":diff===0?"#0a1a0a":diff===1?"#1c1000":"#1c0808";
+    const net  = calcNet(player,pars);
+
+    return (
+      <div className="fade-up" style={{maxWidth:480,margin:"0 auto"}}>
+        <div style={{textAlign:"center",marginBottom:20}}>
+          <div style={{fontFamily:"'Bebas Neue'",fontSize:11,letterSpacing:4,color:"var(--green)",marginBottom:4}}>SCORE ENTRY</div>
+          <div style={{fontFamily:"'Bebas Neue'",fontSize:26,letterSpacing:2}}>{player.name}</div>
+          <div style={{fontSize:12,color:"var(--text3)"}}>HCP {player.handicap} · {player.flight}</div>
+        </div>
+
+        <div className="section-label">── SELECT HOLE</div>
+        <div style={{display:"flex",flexWrap:"wrap",gap:6,marginBottom:20}}>
+          {Array.from({length:18},(_,i)=>{
+            const hs=player.scores[i];
+            return (
+              <button key={i} className={`hole-score-btn ${activeHole===i?"active":""}`}
+                style={{width:44,height:44,background:hs!==null?"var(--bg4)":"var(--bg3)",color:hs!==null?(activeHole===i?"var(--gold)":"var(--text2)"):"var(--text3)"}}
+                onClick={()=>setActiveHole(i)}>
+                {hs!==null?hs:i+1}
+              </button>
+            );
+          })}
+        </div>
+
+        <div className="card" style={{padding:24,marginBottom:16}}>
+          <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:16}}>
+            <div>
+              <div style={{fontFamily:"'Bebas Neue'",fontSize:42,letterSpacing:1,lineHeight:1}}>HOLE {activeHole+1}</div>
+              <div style={{fontSize:12,color:"var(--text3)"}}>Par {par} · {yards[activeHole]}yds · HCP {HCP_STROKES[activeHole]}</div>
+            </div>
+            <div style={{width:80,height:80,borderRadius:"50%",display:"flex",alignItems:"center",justifyContent:"center",fontSize:36,fontFamily:"'Bebas Neue'",background:scBg,border:`2px solid ${scColor}`,color:scColor}}>
+              {s??""}
+            </div>
+          </div>
+          {s!==null && <div style={{textAlign:"center",fontFamily:"'Bebas Neue'",fontSize:13,letterSpacing:3,color:scColor,marginBottom:16}}>{scoreLabel(s,par)}</div>}
+
+          <div style={{display:"grid",gridTemplateColumns:"repeat(5,1fr)",gap:8,marginBottom:16}}>
+            {Array.from({length:10},(_,i)=>i+1).map(n=>(
+              <button key={n} onClick={()=>updateScore(player.id,activeHole,n)}
+                style={{padding:"14px 4px",fontFamily:"'DM Mono'",fontSize:18,cursor:"pointer",transition:"all .15s",borderRadius:6,
+                  background:s===n?"var(--gold)":n===par?"var(--bg4)":"var(--bg3)",
+                  color:s===n?"#060a06":n===par?"var(--green)":"var(--text2)",
+                  border:`1px solid ${s===n?"var(--gold)":n===par?"var(--green-dim)":"var(--border2)"}`}}>
+                {n}
+              </button>
+            ))}
+            <button onClick={()=>updateScore(player.id,activeHole,"")}
+              style={{padding:"14px 4px",fontFamily:"'Bebas Neue'",fontSize:11,letterSpacing:1,cursor:"pointer",borderRadius:6,background:"var(--bg3)",color:"var(--red)",border:"1px solid #2a1010"}}>
+              CLR
+            </button>
+          </div>
+
+          <div style={{display:"flex",gap:8}}>
+            <button className="btn-ghost" style={{flex:1}} disabled={activeHole===0} onClick={()=>setActiveHole(h=>Math.max(0,h-1))}>← PREV</button>
+            <button className="btn-gold"  style={{flex:1,fontSize:13}} disabled={activeHole===17} onClick={()=>setActiveHole(h=>Math.min(17,h+1))}>NEXT →</button>
+          </div>
+        </div>
+
+        <div className="card" style={{padding:16,display:"flex",justifyContent:"space-around"}}>
+          {[["THRU",holesPlayed(player)===18?"F":holesPlayed(player)||"—","var(--text)"],
+            ["GROSS",player.scores.filter(Boolean).reduce((a,b)=>a+b,0)||"—","var(--text)"],
+            ["NET",toPM(net),net<0?"var(--green-bright)":net>0?"var(--amber)":"var(--text)"]
+          ].map(([l,v,c])=>(
+            <div key={l} style={{textAlign:"center"}}>
+              <div style={{fontFamily:"'Bebas Neue'",fontSize:24,color:c}}>{v}</div>
+              <div style={{fontSize:10,letterSpacing:2,color:"var(--text3)",fontFamily:"'Bebas Neue'"}}>{l}</div>
+            </div>
+          ))}
+        </div>
+        <div style={{textAlign:"center",marginTop:14}}>
+          <span style={{fontSize:12,color:"var(--text3)",cursor:"pointer"}} onClick={()=>setScreen("leaderboard")}>← Back to Leaderboard</span>
+        </div>
+      </div>
+    );
+  };
+
+  // ══════════════════════════════════════════════════════════════════════════
+  // ADMIN
+  const AdminView = () => {
+    const [localCourse, setLocalCourse] = useState(course || {});
+    const [saving, setSaving] = useState(false);
+
+    const saveAll = async () => {
+      setSaving(true);
+      await saveCourse(localCourse);
+      setCourse(localCourse);
+      setSaving(false);
+      notify("Course saved!");
+    };
+
+    if (!adminUnlocked) return (
+      <div className="fade-up" style={{maxWidth:340,margin:"0 auto",textAlign:"center"}}>
+        <div style={{fontFamily:"'Bebas Neue'",fontSize:12,letterSpacing:4,color:"var(--green)",marginBottom:10}}>COMMISSIONER ACCESS</div>
+        <h2 style={{fontFamily:"'Bebas Neue'",fontSize:28,marginBottom:24}}>ADMIN LOGIN</h2>
+        <div className="card" style={{padding:28}}>
+          <div className="section-label" style={{textAlign:"left"}}>PIN</div>
+          <input type="password" value={pinInput} onChange={e=>setPinInput(e.target.value)}
+            onKeyDown={e=>{ if(e.key==="Enter"){ if(pinInput===ADMIN_PIN)setAdminUnlocked(true); else setPinError(true); }}}
+            placeholder="••••" style={{width:"100%",fontSize:24,letterSpacing:8,textAlign:"center",marginBottom:10}}/>
+          {pinError && <div style={{color:"var(--red)",fontSize:13,marginBottom:10}}>Incorrect PIN.</div>}
+          <button className="btn-gold" style={{width:"100%"}}
+            onClick={()=>{ if(pinInput===ADMIN_PIN){setAdminUnlocked(true);setPinError(false);}else setPinError(true); }}>
+            UNLOCK
+          </button>
+          <div style={{fontSize:11,color:"var(--text3)",marginTop:12}}>Default PIN: 1234</div>
+        </div>
+      </div>
+    );
+
+    return (
+      <div className="fade-up">
+        {/* Join code banner */}
+        <div style={{marginBottom:24,padding:"16px 20px",background:"var(--bg3)",border:"1px solid var(--border2)",borderRadius:6,display:"flex",alignItems:"center",justifyContent:"space-between",flexWrap:"wrap",gap:12}}>
+          <div>
+            <div className="section-label" style={{marginBottom:2}}>PLAYER JOIN CODE — SHARE THIS</div>
+            <div style={{fontFamily:"'Bebas Neue'",fontSize:30,letterSpacing:5,color:"var(--gold)"}}>{JOIN_CODE}</div>
+          </div>
+          <div style={{fontSize:13,color:"var(--text3)",maxWidth:280}}>Players enter this on the Register screen to join the tournament and enter scores from their phones.</div>
+        </div>
+
+        {/* Course settings */}
+        <div className="section-label">── COURSE SETTINGS</div>
+        <div className="card" style={{padding:20,marginBottom:24}}>
+          <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:12,marginBottom:12}}>
+            {[["Course Name","name"],["City / State","city"],["Slope Rating","slope"],["Course Rating","rating"]].map(([lbl,key])=>(
+              <div key={key}>
+                <div style={{fontSize:10,color:"var(--text3)",letterSpacing:1,marginBottom:4}}>{lbl.toUpperCase()}</div>
+                <input value={localCourse[key]??""} type={key==="slope"||key==="rating"?"number":"text"}
+                  step={key==="rating"?".1":undefined}
+                  onChange={e=>setLocalCourse(c=>({...c,[key]:key==="slope"?parseInt(e.target.value)||0:key==="rating"?parseFloat(e.target.value)||0:e.target.value}))}
+                  style={{width:"100%"}}/>
+              </div>
+            ))}
+          </div>
+
+          {/* Par per hole */}
+          <div style={{marginBottom:12}}>
+            <div style={{fontSize:10,color:"var(--text3)",letterSpacing:1,marginBottom:8}}>PAR PER HOLE (1–18)</div>
+            <div style={{display:"flex",flexWrap:"wrap",gap:6}}>
+              {Array.from({length:18},(_,i)=>(
+                <div key={i} style={{textAlign:"center"}}>
+                  <div style={{fontSize:9,color:"var(--text3)",marginBottom:2}}>{i+1}</div>
+                  <input type="number" min="3" max="6" value={(localCourse.par||DEFAULT_PAR)[i]}
+                    onChange={e=>{ const p=[...(localCourse.par||DEFAULT_PAR)]; p[i]=parseInt(e.target.value)||4; setLocalCourse(c=>({...c,par:p})); }}
+                    style={{width:40,textAlign:"center",padding:"4px 2px"}}/>
+                </div>
+              ))}
+            </div>
+          </div>
+
+          {/* Yardage per hole */}
+          <div style={{marginBottom:16}}>
+            <div style={{fontSize:10,color:"var(--text3)",letterSpacing:1,marginBottom:8}}>YARDAGE PER HOLE (1–18)</div>
+            <div style={{display:"flex",flexWrap:"wrap",gap:6}}>
+              {Array.from({length:18},(_,i)=>(
+                <div key={i} style={{textAlign:"center"}}>
+                  <div style={{fontSize:9,color:"var(--text3)",marginBottom:2}}>{i+1}</div>
+                  <input type="number" min="100" max="700" value={(localCourse.yards||DEFAULT_YARDS)[i]}
+                    onChange={e=>{ const y=[...(localCourse.yards||DEFAULT_YARDS)]; y[i]=parseInt(e.target.value)||400; setLocalCourse(c=>({...c,yards:y})); }}
+                    style={{width:52,textAlign:"center",padding:"4px 2px"}}/>
+                </div>
+              ))}
+            </div>
+          </div>
+
+          <div style={{marginBottom:16}}>
+            <div style={{fontSize:10,color:"var(--text3)",letterSpacing:1,marginBottom:4}}>DESCRIPTION</div>
+            <textarea value={localCourse.description??""} onChange={e=>setLocalCourse(c=>({...c,description:e.target.value}))} rows={3} style={{width:"100%",resize:"vertical"}}/>
+          </div>
+
+          <button className="btn-gold" onClick={saveAll} disabled={saving} style={{fontSize:13}}>
+            {saving?"SAVING…":"SAVE COURSE CHANGES"}
+          </button>
+        </div>
+
+        {/* Players */}
+        <div className="section-label">── PLAYER ROSTER ({players.length} players)</div>
+        <div className="card" style={{overflow:"hidden",marginBottom:12}}>
+          <div style={{display:"grid",gridTemplateColumns:"1fr 80px 150px 90px",background:"var(--bg3)",padding:"9px 16px",fontSize:10,letterSpacing:2,color:"var(--text3)",fontFamily:"'Bebas Neue'"}}>
+            <span>NAME</span><span>HCP</span><span>FLIGHT</span><span></span>
+          </div>
+          {players.map(p=>(
+            <div key={p.id} style={{display:"grid",gridTemplateColumns:"1fr 80px 150px 90px",padding:"10px 16px",borderBottom:"1px solid var(--border)",alignItems:"center",gap:8}}>
+              <input value={p.name} onChange={e=>updateField(p.id,"name",e.target.value)} style={{width:"100%",padding:"5px 8px"}}/>
+              <input type="number" value={p.handicap} onChange={e=>updateField(p.id,"handicap",e.target.value)} min="0" max="54" style={{width:65}}/>
+              <select value={p.flight} onChange={e=>updateField(p.id,"flight",e.target.value)} style={{width:"100%"}}>
+                {FLIGHTS.map(f=><option key={f}>{f}</option>)}
+              </select>
+              <button className="btn-danger" onClick={()=>removePlayerDb(p.id)}>✕ Remove</button>
+            </div>
+          ))}
+          {players.length===0 && <div style={{padding:24,textAlign:"center",color:"var(--text3)",fontSize:13}}>No players yet. They'll appear here once they register.</div>}
+        </div>
+        <button className="btn-gold" style={{fontSize:13}} onClick={async()=>{
+          const np={id:`player-${Date.now()}`,name:"New Player",handicap:0,flight:"A Flight",scores:Array(18).fill(null)};
+          await savePlayer(np);
+          notify("Player added.");
+        }}>+ ADD PLAYER</button>
+      </div>
+    );
+  };
+
+  // ══════════════════════════════════════════════════════════════════════════
+  // ROOT RENDER
+  const NAV = [
+    ["leaderboard","🏆 LEADERBOARD"],["scorecard","📋 SCORECARDS"],
+    ["course","🗺 COURSE"],["register","✍ REGISTER"],
+    ["my-scores-login","✏️ MY SCORES"],["admin","⚙ ADMIN"],
+  ];
+  const activeNav = screen==="my-scores"?"my-scores-login":screen;
+
+  return (
+    <div style={{minHeight:"100vh",background:"var(--bg)",color:"var(--text)"}}>
+      <style>{CSS}</style>
+      {notif && <div className={`notif notif-${notif.type}`}>{notif.msg}</div>}
+
+      {/* Scorecard modal */}
+      {showScModal && (course?.scorecardImage||course?.scorecardPdf) && (
+        <div className="modal-bg" onClick={()=>setShowScModal(false)}>
+          <div style={{background:"var(--bg2)",border:"1px solid var(--border2)",borderRadius:8,padding:20,maxWidth:"92vw",maxHeight:"90vh",overflow:"auto"}} onClick={e=>e.stopPropagation()}>
+            <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:12}}>
+              <span style={{fontFamily:"'Bebas Neue'",letterSpacing:2,fontSize:16}}>{course?.name} — Official Scorecard</span>
+              <button className="btn-ghost btn-sm" onClick={()=>setShowScModal(false)}>✕ Close</button>
+            </div>
+            {course.scorecardImage && <img src={course.scorecardImage} alt="Scorecard" style={{maxWidth:"80vw",maxHeight:"76vh",objectFit:"contain",display:"block"}}/>}
+            {course.scorecardPdf   && <iframe src={course.scorecardPdf} title="PDF" style={{width:"78vw",height:"76vh",border:"none"}}/>}
+          </div>
+        </div>
+      )}
+
+      {/* Header */}
+      <div style={{background:"linear-gradient(180deg,#080e08,var(--bg))",borderBottom:"1px solid var(--border)",padding:"0 20px"}}>
+        <div style={{maxWidth:1100,margin:"0 auto"}}>
+          <div style={{padding:"18px 0 0",display:"flex",alignItems:"flex-start",justifyContent:"space-between",flexWrap:"wrap",gap:10}}>
+            <div>
+              <div style={{fontFamily:"'Bebas Neue'",fontSize:10,letterSpacing:4,color:"var(--green)",marginBottom:3,display:"flex",alignItems:"center",gap:8}}>
+                <span className={`sync-dot ${syncStatus}`}/>
+                {syncStatus==="synced"?"LIVE · ALL SCORES SYNCED":syncStatus==="syncing"?"SYNCING…":"SYNC ERROR — CHECK CONNECTION"}
+              </div>
+              <div style={{fontFamily:"'Bebas Neue'",fontSize:34,letterSpacing:3,lineHeight:1}}>NORTH STAR AMATEUR SERIES</div>
+              <div style={{fontSize:12,color:"var(--text3)",marginTop:3}}>{course?.name} · {course?.city} · Par {totalPar} · {players.length} Players</div>
+            </div>
+            <div style={{display:"flex",gap:8,flexWrap:"wrap",alignItems:"center"}}>
+              <button className="btn-ghost btn-sm" onClick={()=>{ setRegSuccess(false); setRegError(""); setScreen("register"); }}>JOIN / REGISTER</button>
+              <button className="btn-gold  btn-sm" onClick={()=>setScreen(activePlayer?"my-scores":"my-scores-login")}>✏️ MY SCORES</button>
+            </div>
+          </div>
+          <div style={{display:"flex",marginTop:12,overflowX:"auto"}}>
+            {NAV.map(([val,label])=>(
+              <div key={val} className={`nav-pill ${activeNav===val?"active":""}`}
+                onClick={()=>{ if(val==="my-scores-login"&&activePlayer)setScreen("my-scores"); else setScreen(val); }}>
+                {label}
+              </div>
+            ))}
+          </div>
+        </div>
+      </div>
+
+      {/* Body */}
+      <div style={{maxWidth:1100,margin:"0 auto",padding:"24px 16px"}}>
+        {screen==="leaderboard"     && <Leaderboard/>}
+        {screen==="scorecard"       && <ScorecardView/>}
+        {screen==="course"          && <CourseView/>}
+        {screen==="register"        && <RegisterView/>}
+        {screen==="my-scores-login" && <MyScoresLogin/>}
+        {screen==="my-scores"       && <MyScores/>}
+        {screen==="admin"           && <AdminView/>}
+      </div>
+    </div>
+  );
+}
