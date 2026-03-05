@@ -1071,7 +1071,7 @@ export default function App() {
         <div style={{maxWidth:1100,margin:"0 auto"}}>
           <div style={{padding:"18px 0 0",display:"flex",alignItems:"flex-start",justifyContent:"space-between",flexWrap:"wrap",gap:10}}>
             <div style={{display:"flex",alignItems:"center",gap:14}}>
-              <img src="/logo.png" alt="North Star Golf" style={{width:64,height:64,objectFit:"contain",flexShrink:0}}/>
+              <img src="/logo.png" alt="North Star Golf" style={{width:72,height:72,objectFit:"cover",objectPosition:"center",borderRadius:"50%",flexShrink:0,mixBlendMode:"lighten"}}/>
               <div>
                 <div style={{fontFamily:"'Bebas Neue'",fontSize:10,letterSpacing:4,color:"var(--green)",marginBottom:3,display:"flex",alignItems:"center",gap:8}}>
                   <span className={`sync-dot ${syncStatus}`}/>

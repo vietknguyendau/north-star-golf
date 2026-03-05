@@ -308,7 +308,7 @@ export default function RulesPage({ adminUnlocked }) {
 
       {/* Hero */}
       <div className="rules-hero">
-        <img src="/logo.png" alt="North Star Golf" style={{width:110,height:110,objectFit:"contain",marginBottom:12}}/>
+        <img src="/logo.png" alt="North Star Golf" style={{width:150,height:150,objectFit:"cover",objectPosition:"center",borderRadius:"50%",marginBottom:16,mixBlendMode:"lighten"}}/>
         <div style={{fontFamily:"'Bebas Neue'",fontSize:11,letterSpacing:5,color:"var(--green)",marginBottom:8}}>OFFICIAL LEAGUE DOCUMENT · 2026</div>
         <div style={{fontFamily:"'Bebas Neue'",fontSize:38,letterSpacing:3,color:"var(--text)",marginBottom:6}}>NORTH STAR AMATEUR SERIES</div>
         <div style={{fontFamily:"'Bebas Neue'",fontSize:16,letterSpacing:3,color:"var(--gold)",marginBottom:14}}>RULES, FORMAT & REGULATIONS</div>
