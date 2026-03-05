@@ -1070,13 +1070,16 @@ export default function App() {
       <div style={{background:"linear-gradient(180deg,#080e08,var(--bg))",borderBottom:"1px solid var(--border)",padding:"0 20px"}}>
         <div style={{maxWidth:1100,margin:"0 auto"}}>
           <div style={{padding:"18px 0 0",display:"flex",alignItems:"flex-start",justifyContent:"space-between",flexWrap:"wrap",gap:10}}>
-            <div>
-              <div style={{fontFamily:"'Bebas Neue'",fontSize:10,letterSpacing:4,color:"var(--green)",marginBottom:3,display:"flex",alignItems:"center",gap:8}}>
-                <span className={`sync-dot ${syncStatus}`}/>
-                {syncStatus==="synced"?"LIVE · ALL SCORES SYNCED":syncStatus==="syncing"?"SYNCING…":"SYNC ERROR — CHECK CONNECTION"}
+            <div style={{display:"flex",alignItems:"center",gap:14}}>
+              <img src="/logo.png" alt="North Star Golf" style={{width:64,height:64,objectFit:"contain",flexShrink:0}}/>
+              <div>
+                <div style={{fontFamily:"'Bebas Neue'",fontSize:10,letterSpacing:4,color:"var(--green)",marginBottom:3,display:"flex",alignItems:"center",gap:8}}>
+                  <span className={`sync-dot ${syncStatus}`}/>
+                  {syncStatus==="synced"?"LIVE · ALL SCORES SYNCED":syncStatus==="syncing"?"SYNCING…":"SYNC ERROR — CHECK CONNECTION"}
+                </div>
+                <div style={{fontFamily:"'Bebas Neue'",fontSize:34,letterSpacing:3,lineHeight:1}}>NORTH STAR AMATEUR SERIES</div>
+                <div style={{fontSize:12,color:"var(--text3)",marginTop:3}}>{course?.name} · {course?.city} · Par {totalPar} · {players.length} Players</div>
               </div>
-              <div style={{fontFamily:"'Bebas Neue'",fontSize:34,letterSpacing:3,lineHeight:1}}>NORTH STAR AMATEUR SERIES</div>
-              <div style={{fontSize:12,color:"var(--text3)",marginTop:3}}>{course?.name} · {course?.city} · Par {totalPar} · {players.length} Players</div>
             </div>
             <div style={{display:"flex",gap:8,flexWrap:"wrap",alignItems:"center"}}>
               <button className="btn-ghost btn-sm" onClick={()=>{ setRegSuccess(false); setRegError(""); setScreen("register"); }}>JOIN / REGISTER</button>
