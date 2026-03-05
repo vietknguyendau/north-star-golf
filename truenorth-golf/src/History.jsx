@@ -7,7 +7,16 @@ const TOURNAMENT_ID = "tournament-2024";
 const POINTS_TABLE = [100,85,75,65,55,50,45,40,36,32,29,26,24,22,20,18,16,14,12,10];
 const getBasePoints = (place) => place >= 1 && place <= POINTS_TABLE.length ? POINTS_TABLE[place-1] : 5;
 const getPoints = (place, multiplier=1) => Math.round(getBasePoints(place) * multiplier);
-const PAYOUT_SPLITS = [0.40, 0.27, 0.20, 0.13];
+// Event-specific payout structures
+const PAYOUT_CONFIG = {
+  "event-1": { splits:[250,125,75,50],  label:"Standard" },
+  "event-2": { splits:[250,125,75,50],  label:"Standard" },
+  "event-3": { splits:[250,125,75,50],  label:"Standard" },
+  "event-4": { splits:[375,188,112,75], label:"Major" },
+  "event-5": { splits:[250,125,75,50],  label:"Standard" },
+  "event-6": { splits:[800,500,360,220,120], label:"Championship" },
+};
+const getPayouts = (eventId) => PAYOUT_CONFIG[eventId] || PAYOUT_CONFIG["event-1"];
 
 const SEASON_EVENTS = [
   { id:"event-1", order:1, name:"Opening Classic",               date:"May 30, 2026",       course:"Rum River Hills",         multiplier:1, payoutTop4:false },
@@ -194,7 +203,7 @@ export default function TournamentHistory({ players }) {
           {/* Inner tabs */}
           <div style={{display:"flex",gap:8,marginBottom:20,flexWrap:"wrap"}}>
             {[["leaderboard","🏆 LEADERBOARD"],["scorecards","📋 SCORECARDS"],["points","⭐ POINTS"],
-              ...(pot?[["payouts","💰 PAYOUTS"]]:[])
+              ["payouts","💰 PAYOUTS"]
             ].map(([val,lbl])=>(
               <button key={val} className={`tab-pill ${innerTab===val?"active":""}`} onClick={()=>{ setInnerTab(val); setSelectedPlayer(null); }}>
                 {lbl}
@@ -351,38 +360,37 @@ export default function TournamentHistory({ players }) {
           )}
 
           {/* ── PAYOUTS */}
-          {innerTab==="payouts" && pot>0 && (
+          {innerTab==="payouts" && (
             <div>
               <div className="hist-card" style={{overflow:"hidden",marginBottom:16}}>
                 <div style={{padding:"14px 20px",background:"var(--bg3)",borderBottom:"1px solid var(--border)",display:"flex",justifyContent:"space-between",alignItems:"center"}}>
-                  <div style={{fontFamily:"'Bebas Neue'",fontSize:14,letterSpacing:2,color:"var(--gold)"}}>TOTAL POT</div>
-                  <div style={{fontFamily:"'Bebas Neue'",fontSize:28,color:"var(--gold)"}}>${pot}</div>
+                  <div>
+                    <div style={{fontFamily:"'Bebas Neue'",fontSize:14,letterSpacing:2,color:"var(--gold)"}}>{getPayouts(selectedEvent).label.toUpperCase()} EVENT PURSE</div>
+                    <div style={{fontSize:11,color:"var(--text3)",marginTop:2}}>{getPayouts(selectedEvent).label==="Championship"?"Top 5 paid out":"Top 4 paid out"}</div>
+                  </div>
+                  <div style={{fontFamily:"'Bebas Neue'",fontSize:28,color:"var(--gold)"}}>${getPayouts(selectedEvent).splits.reduce((a,b)=>a+b,0)}</div>
                 </div>
-                {leaderboard.slice(0,4).map((p,idx)=>(
+                {(()=>{ const cfg=getPayouts(selectedEvent); return leaderboard.slice(0,cfg.splits.length).map((p,idx)=>(
                   <div key={p.id} className="hist-row" style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"14px 20px"}}>
                     <div style={{display:"flex",alignItems:"center",gap:14}}>
                       <span className="place-badge" style={{color:idx===0?"var(--gold)":idx===1?"#90b0b8":idx===2?"#c08050":"var(--text2)"}}>
-                        {idx===0?"1ST":idx===1?"2ND":idx===2?"3RD":"4TH"}
+                        {["1ST","2ND","3RD","4TH","5TH"][idx]}
                       </span>
                       <div>
                         <div style={{fontSize:16,fontWeight:600,color:"var(--text2)"}}>{p.name}</div>
-                        <div style={{fontSize:11,color:"var(--text3)"}}>{Math.round(PAYOUT_SPLITS[idx]*100)}% of pot</div>
+                        <div style={{fontSize:11,color:"var(--text3)"}}>{cfg.label} event · place {idx+1}</div>
                       </div>
                     </div>
-                    <div style={{fontFamily:"'Bebas Neue'",fontSize:28,color:"var(--gold)"}}>
-                      ${Math.round(pot*PAYOUT_SPLITS[idx])}
-                    </div>
+                    <div style={{fontFamily:"'Bebas Neue'",fontSize:28,color:"var(--gold)"}}>${cfg.splits[idx]}</div>
                   </div>
-                ))}
+                )); })()}
               </div>
               <div style={{fontSize:12,color:"var(--text3)",fontStyle:"italic",textAlign:"right"}}>
-                Split: 40% · 27% · 20% · 13%
+                Payouts per North Star Amateur Series official structure
               </div>
             </div>
           )}
-          {innerTab==="payouts" && !pot && (
-            <div style={{color:"var(--text3)",fontSize:14,fontStyle:"italic",padding:"20px 0"}}>No pot recorded for this event.</div>
-          )}
+          
         </div>
       )}
     </div>
