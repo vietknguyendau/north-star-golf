@@ -623,7 +623,7 @@ export default function App() {
                         {scorecardUploads[player.id]?.url && !scorecardUploads[player.id]?.verified && <span style={{fontSize:9,fontFamily:"'Bebas Neue'",letterSpacing:1,color:"var(--gold)",border:"1px solid var(--gold-dim)",borderRadius:2,padding:"1px 4px"}}>PENDING ⏳</span>}
                         {scorecardUploads[player.id]?.verified && <span style={{fontSize:9,fontFamily:"'Bebas Neue'",letterSpacing:1,color:"var(--green)",border:"1px solid var(--green-dim)",borderRadius:2,padding:"1px 4px"}}>✓ VERIFIED</span>}
                       </div>
-                      <div style={{fontSize:11,color:"var(--text3)",letterSpacing:1}}>{player.flight}</div>
+                      <div style={{fontSize:11,color:"var(--text3)",letterSpacing:1}}></div>
                     </div>
                     <div style={{textAlign:"center"}}>
                       <div style={{fontSize:15,color:thru===18?"var(--green)":"var(--text)"}}>{thru===18?"F":thru||"—"}</div>
@@ -731,7 +731,7 @@ export default function App() {
           <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:24,flexWrap:"wrap",gap:16}}>
             <div>
               <h2 style={{fontFamily:"'Bebas Neue'",fontSize:30,letterSpacing:2}}>{player.name}</h2>
-              <div style={{fontSize:12,color:"var(--text3)",letterSpacing:1}}>{player.flight} · Handicap {player.handicap}</div>
+              <div style={{fontSize:12,color:"var(--text3)",letterSpacing:1}}>Handicap {player.handicap}</div>
             </div>
             <div style={{display:"flex",gap:24}}>
               {[["GROSS",gross||"—","var(--text)"],["THRU",thru===18?"F":thru||"—",thru===18?"var(--green)":"var(--text2)"],["NET",toPM(net),net<0?"var(--green-bright)":net>0?"var(--amber)":"var(--text)"]].map(([l,v,c])=>(
@@ -943,7 +943,7 @@ export default function App() {
                   onClick={()=>{ setPendingPlayer(p); setScorePin(""); setScorePinError(""); }}>
                   <div>
                     <div style={{fontSize:17,fontWeight:600}}>{p.name}</div>
-                    <div style={{fontSize:12,color:"var(--text3)"}}>{p.flight} · HCP {p.handicap} · Thru {holesPlayed(p)||"—"}</div>
+                    <div style={{fontSize:12,color:"var(--text3)"}}>HCP {p.handicap} · Thru {holesPlayed(p)||"—"}</div>
                   </div>
                   <span style={{color:"var(--gold)",fontSize:12,fontFamily:"'Bebas Neue'",letterSpacing:1}}>SELECT →</span>
                 </div>
@@ -1006,7 +1006,7 @@ export default function App() {
         <div style={{textAlign:"center",marginBottom:20}}>
           <div style={{fontFamily:"'Bebas Neue'",fontSize:11,letterSpacing:4,color:"var(--green)",marginBottom:4}}>SCORE ENTRY</div>
           <div style={{fontFamily:"'Bebas Neue'",fontSize:26,letterSpacing:2}}>{player.name}</div>
-          <div style={{fontSize:12,color:"var(--text3)"}}>HCP {player.handicap} · {player.flight}</div>
+          <div style={{fontSize:12,color:"var(--text3)"}}>HCP {player.handicap}</div>
           <button onClick={()=>{ setActivePlayer(null); setScreen("my-scores-login"); }}
             style={{marginTop:10,padding:"5px 14px",fontSize:11,fontFamily:"'Bebas Neue'",letterSpacing:1,background:"transparent",border:"1px solid #3a1010",color:"var(--red)",borderRadius:3,cursor:"pointer"}}>
             🔒 LOCK &amp; EXIT
