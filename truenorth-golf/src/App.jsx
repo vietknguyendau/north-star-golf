@@ -1,10 +1,12 @@
 import React, { useState, useRef, useEffect } from "react";
 import RulesPage from "./Rules";
+import Sidebets from "./Sidebets";
 import TournamentHistory from "./History";
 import SeasonStandings from "./Season";
 import HandicapTracker from "./Handicap";
 import { searchCourses } from "./mnCourses";
-import { db } from "./firebase";
+import { db, storage } from "./firebase";
+import { ref, uploadBytes, getDownloadURL } from "firebase/storage";
 import {
   doc, collection, onSnapshot, setDoc, updateDoc, deleteDoc, getDoc
 } from "firebase/firestore";
@@ -17,7 +19,7 @@ const hashPin = async (pin) => {
 };
 
 // ─── Constants ───────────────────────────────────────────────────────────────
-const FLIGHTS       = ["Championship", "A Flight", "B Flight", "C Flight"];
+const SKILL_LEVELS  = ["Scratch (0-5)", "Low (6-12)", "Mid (13-20)", "High (21+)"];
 const DEFAULT_PAR   = [4,4,3,4,5,3,4,4,5, 4,3,4,5,4,3,4,4,5];
 const DEFAULT_YARDS = [385,412,178,395,520,162,430,388,510, 402,185,415,535,375,160,420,395,525];
 const HCP_STROKES   = [7,1,15,5,9,17,3,13,11, 8,18,4,6,16,14,2,12,10];
@@ -146,7 +148,8 @@ button{cursor:pointer;font-family:'Bebas Neue',sans-serif;letter-spacing:1.5px;b
 // ═════════════════════════════════════════════════════════════════════════════
 // ── AdminView as standalone component to prevent remount on parent re-render
 function AdminView({ course, players, adminUnlocked, setAdminUnlocked, pinInput, setPinInput,
-  pinError, setPinError, savePlayer, removePlayerDb, saveCourse, setCourse, updateField, notify }) {
+  pinError, setPinError, savePlayer, removePlayerDb, saveCourse, setCourse, updateField, notify,
+  scorecardUploads }) {
     const [localCourse, setLocalCourse] = useState(course || {});
     const [saving, setSaving] = useState(false);
     const [courseKey, setCourseKey] = useState(0);
@@ -298,22 +301,54 @@ function AdminView({ course, players, adminUnlocked, setAdminUnlocked, pinInput,
         <div className="section-label">── PLAYER ROSTER ({players.length} players)</div>
         <div className="card" style={{overflow:"hidden",marginBottom:12}}>
           <div style={{display:"grid",gridTemplateColumns:"1fr 80px 150px 90px",background:"var(--bg3)",padding:"9px 16px",fontSize:10,letterSpacing:2,color:"var(--text3)",fontFamily:"'Bebas Neue'"}}>
-            <span>NAME</span><span>HCP</span><span>FLIGHT</span><span></span>
+            <span>NAME</span><span>HCP</span><span>SKILL LEVEL</span><span></span>
           </div>
           {players.map(p=>(
             <div key={p.id} style={{display:"grid",gridTemplateColumns:"1fr 80px 150px 90px",padding:"10px 16px",borderBottom:"1px solid var(--border)",alignItems:"center",gap:8}}>
               <input defaultValue={p.name} key={p.id+"-name"} onBlur={e=>updateField(p.id,"name",e.target.value)} style={{width:"100%",padding:"5px 8px"}}/>
-              <input type="number" defaultValue={p.handicap} key={p.id+"-hcp"} onBlur={e=>updateField(p.id,"handicap",e.target.value)} min="0" max="54" style={{width:65}}/>
+              <input type="number" defaultValue={p.handicap} key={p.id+"-hcp"} onBlur={e=>updateField(p.id,"handicap",e.target.value)} min="0" max="54" style={{width:65,borderColor:"var(--gold-dim)"}} title="Commissioner verified handicap"/>
               <select value={p.flight} onChange={e=>updateField(p.id,"flight",e.target.value)} style={{width:"100%"}}>
-                {FLIGHTS.map(f=><option key={f}>{f}</option>)}
+                {SKILL_LEVELS.map(f=><option key={f}>{f}</option>)}
               </select>
               <button className="btn-danger" onClick={()=>removePlayerDb(p.id)}>✕ Remove</button>
             </div>
+            {/* Scorecard verification panel */}
+            {(()=>{
+              const upload = scorecardUploads?.[p.id];
+              if (!upload?.url) return (
+                <div style={{padding:"6px 12px 10px",fontSize:11,color:"var(--text3)",fontStyle:"italic",borderTop:"1px solid var(--border)"}}>
+                  No scorecard uploaded yet.
+                </div>
+              );
+              return (
+                <div style={{padding:"10px 12px",borderTop:"1px solid var(--border)",display:"flex",gap:12,alignItems:"flex-start",flexWrap:"wrap",background:"var(--bg3)"}}>
+                  <img src={upload.url} alt="Scorecard" style={{width:100,height:70,objectFit:"cover",borderRadius:3,border:"1px solid var(--border2)",cursor:"pointer"}}
+                    onClick={()=>window.open(upload.url,"_blank")}/>
+                  <div style={{flex:1}}>
+                    <div style={{fontSize:11,color:"var(--text3)",marginBottom:6}}>📸 Uploaded: {upload.uploadedAt}</div>
+                    {upload.verified ? (
+                      <div style={{display:"flex",alignItems:"center",gap:8}}>
+                        <span style={{fontSize:11,color:"var(--green)",fontFamily:"'Bebas Neue'",letterSpacing:1}}>✓ VERIFIED · {upload.verifiedAt}</span>
+                        <button className="btn-ghost" style={{fontSize:10,padding:"2px 8px",color:"var(--amber)",borderColor:"var(--amber)"}}
+                          onClick={async()=>{ await setDoc(doc(db,"tournaments",TOURNAMENT_ID,"scorecard_uploads",p.id),{...upload,verified:false}); notify("Verification removed."); }}>
+                          UNVERIFY
+                        </button>
+                      </div>
+                    ) : (
+                      <button className="btn-gold" style={{fontSize:11,padding:"5px 14px"}}
+                        onClick={async()=>{ await setDoc(doc(db,"tournaments",TOURNAMENT_ID,"scorecard_uploads",p.id),{...upload,verified:true,verifiedAt:new Date().toLocaleDateString("en-US",{month:"short",day:"numeric"})}); notify(`${p.name} verified! ✓`); }}>
+                        ✓ MARK AS VERIFIED
+                      </button>
+                    )}
+                  </div>
+                </div>
+              );
+            })()}
           ))}
           {players.length===0 && <div style={{padding:24,textAlign:"center",color:"var(--text3)",fontSize:13}}>No players yet. They'll appear here once they register.</div>}
         </div>
         <button className="btn-gold" style={{fontSize:13}} onClick={async()=>{
-          const np={id:`player-${Date.now()}`,name:"New Player",handicap:0,flight:"A Flight",scores:Array(18).fill(null)};
+          const np={id:`player-${Date.now()}`,name:"New Player",handicap:0,flight:"Mid (13-20)",scores:Array(18).fill(null)};
           await savePlayer(np);
           notify("Player added.");
         }}>+ ADD PLAYER</button>
@@ -373,16 +408,16 @@ export default function App() {
   // ── Firebase state ──
   const [players, setPlayers]   = useState([]);
   const [course, setCourse]     = useState(null);
+  const [scorecardUploads, setScorecardUploads] = useState({}); // { playerId: { url, verified, uploadedAt } }
   const [loading, setLoading]   = useState(true);
   const [syncStatus, setSyncStatus] = useState("synced"); // synced | syncing | error
 
   // ── UI state ──
   const [screen, setScreen]           = useState("leaderboard");
-  const [activeFlight, setActiveFlight] = useState("All");
   const [selectedPid, setSelectedPid] = useState(null);
   const [activePlayer, setActivePlayer] = useState(null);
   const [activeHole, setActiveHole]   = useState(0);
-  const [regForm, setRegForm]         = useState({ code:"", name:"", handicap:"", flight:"Championship", pin:"", pin2:"" });
+  const [regForm, setRegForm]         = useState({ code:"", name:"", handicap:"", flight:"Scratch (0-5)", pin:"", pin2:"" });
   const [regError, setRegError]       = useState("");
   const [regSuccess, setRegSuccess]   = useState(false);
   const [showScModal, setShowScModal] = useState(false);
@@ -434,7 +469,17 @@ export default function App() {
       }
     );
 
-    return () => { unsub1(); unsub2(); };
+    // Listen to scorecard uploads
+    const unsub3 = onSnapshot(
+      collection(db, "tournaments", TOURNAMENT_ID, "scorecard_uploads"),
+      snap => {
+        const d = {};
+        snap.docs.forEach(doc => { d[doc.id] = doc.data(); });
+        setScorecardUploads(d);
+      }
+    );
+
+    return () => { unsub1(); unsub2(); unsub3(); };
   }, []);
 
   const notify = (msg, type="success") => {
@@ -480,7 +525,7 @@ export default function App() {
 
   // ── Player helpers ──
   const sortedFlight = flight => {
-    const base = flight === "All" ? players : players.filter(p=>p.flight===flight);
+    const base = players; // unified leaderboard — no flight filtering
     return [...base].sort((a,b)=>{
       const an=calcNet(a,pars), bn=calcNet(b,pars);
       if(an===null&&bn===null)return 0;
@@ -539,7 +584,7 @@ export default function App() {
     reader.readAsDataURL(file);
   };
 
-  const flightTabs = ["All", ...FLIGHTS.filter(f=>players.some(p=>p.flight===f))];
+  // Single unified leaderboard — no flights
 
   if (loading) return (
     <div style={{minHeight:"100vh",background:"#080c08",display:"flex",alignItems:"center",justifyContent:"center",flexDirection:"column",gap:16}}>
@@ -552,17 +597,10 @@ export default function App() {
   // LEADERBOARD
   const Leaderboard = () => (
     <div className="fade-up">
-      <div style={{display:"flex",gap:8,marginBottom:20,flexWrap:"wrap"}}>
-        {flightTabs.map(f=>(
-          <button key={f} className={`flight-chip ${activeFlight===f?"active":""}`} onClick={()=>setActiveFlight(f)}>{f}</button>
-        ))}
-      </div>
-      {(activeFlight==="All" ? FLIGHTS.filter(f=>players.some(p=>p.flight===f)) : [activeFlight]).map(flight=>{
-        const fp = sortedFlight(flight);
-        if (!fp.length) return null;
+      {(()=>{
+        const fp = sortedFlight("All");
         return (
-          <div key={flight} style={{marginBottom:32}}>
-            <div className="section-label">── {flight}</div>
+          <div style={{marginBottom:32}}>
             <div className="card" style={{overflow:"hidden"}}>
               <div style={{display:"grid",gridTemplateColumns:"52px 1fr 70px 80px 80px 60px",background:"var(--bg3)",padding:"9px 16px",fontSize:10,letterSpacing:2,color:"var(--text3)",fontFamily:"'Bebas Neue'"}}>
                 <span>POS</span><span>PLAYER</span><span style={{textAlign:"center"}}>THRU</span><span style={{textAlign:"center"}}>GROSS</span><span style={{textAlign:"center"}}>NET</span><span style={{textAlign:"center"}}>HCP</span>
@@ -579,7 +617,12 @@ export default function App() {
                       {idx===0?"1ST":idx===1?"2ND":idx===2?"3RD":`${idx+1}`}
                     </span>
                     <div>
-                      <div style={{fontSize:17,color:lead?"var(--text)":"var(--text2)",fontWeight:600}}>{player.name}</div>
+                      <div style={{fontSize:17,color:lead?"var(--text)":"var(--text2)",fontWeight:600,display:"flex",alignItems:"center",gap:6,flexWrap:"wrap"}}>
+                        {player.name}
+                        {holesPlayed(player)>0 && !scorecardUploads[player.id]?.url && <span style={{fontSize:9,fontFamily:"'Bebas Neue'",letterSpacing:1,color:"var(--amber)",border:"1px solid var(--amber)",borderRadius:2,padding:"1px 4px"}}>UNVERIFIED</span>}
+                        {scorecardUploads[player.id]?.url && !scorecardUploads[player.id]?.verified && <span style={{fontSize:9,fontFamily:"'Bebas Neue'",letterSpacing:1,color:"var(--gold)",border:"1px solid var(--gold-dim)",borderRadius:2,padding:"1px 4px"}}>PENDING ⏳</span>}
+                        {scorecardUploads[player.id]?.verified && <span style={{fontSize:9,fontFamily:"'Bebas Neue'",letterSpacing:1,color:"var(--green)",border:"1px solid var(--green-dim)",borderRadius:2,padding:"1px 4px"}}>✓ VERIFIED</span>}
+                      </div>
                       <div style={{fontSize:11,color:"var(--text3)",letterSpacing:1}}>{player.flight}</div>
                     </div>
                     <div style={{textAlign:"center"}}>
@@ -816,13 +859,14 @@ export default function App() {
               </div>
               <div style={{display:"flex",gap:12}}>
                 <div style={{flex:1}}>
-                  <div className="section-label">HANDICAP</div>
+                  <div className="section-label">HANDICAP INDEX</div>
                   <input type="number" defaultValue={regForm.handicap} onBlur={e=>setRegForm(f=>({...f,handicap:e.target.value}))} placeholder="0" min="0" max="54" style={{width:"100%"}}/>
+                  <div style={{fontSize:11,color:"var(--amber)",marginTop:5,lineHeight:1.4}}>⚠ Commissioner verifies before Event 1. Have your Grint screenshot ready.</div>
                 </div>
                 <div style={{flex:2}}>
-                  <div className="section-label">FLIGHT</div>
+                  <div className="section-label">SKILL LEVEL</div>
                   <select value={regForm.flight} onChange={e=>setRegForm(f=>({...f,flight:e.target.value}))} style={{width:"100%"}}>
-                    {FLIGHTS.map(f=><option key={f}>{f}</option>)}
+                    {SKILL_LEVELS.map(f=><option key={f}>{f}</option>)}
                   </select>
                 </div>
               </div>
@@ -1028,6 +1072,84 @@ export default function App() {
             </div>
           ))}
         </div>
+        {/* Scorecard Upload Section */}
+        {(()=>{
+          const upload = scorecardUploads[player.id];
+          const allFilled = player.scores.filter(Boolean).length >= 9;
+          const [uploading, setUploading] = React.useState(false);
+          const [uploadErr, setUploadErr] = React.useState("");
+
+          const handleUpload = async (e) => {
+            const file = e.target.files[0];
+            if (!file) return;
+            if (!file.type.startsWith("image/")) { setUploadErr("Please upload an image file."); return; }
+            if (file.size > 10 * 1024 * 1024) { setUploadErr("Image too large. Max 10MB."); return; }
+            setUploading(true); setUploadErr("");
+            try {
+              const storageRef = ref(storage, `scorecards/${player.id}_${Date.now()}.jpg`);
+              await uploadBytes(storageRef, file);
+              const url = await getDownloadURL(storageRef);
+              await setDoc(doc(db, "tournaments", TOURNAMENT_ID, "scorecard_uploads", player.id), {
+                url, playerId: player.id, playerName: player.name,
+                uploadedAt: new Date().toLocaleDateString("en-US",{month:"short",day:"numeric",year:"numeric",hour:"2-digit",minute:"2-digit"}),
+                verified: false,
+              });
+              notify("Scorecard uploaded! Awaiting commissioner verification.");
+            } catch(err) { setUploadErr("Upload failed. Try again."); console.error(err); }
+            setUploading(false);
+          };
+
+          return (
+            <div className="card" style={{padding:20,marginTop:16,border:upload?.verified?"1px solid var(--green)":upload?.url?"1px solid var(--gold-dim)":"1px solid var(--border2)"}}>
+              <div style={{fontFamily:"'Bebas Neue'",fontSize:13,letterSpacing:3,marginBottom:10,
+                color:upload?.verified?"var(--green)":upload?.url?"var(--gold)":"var(--text3)"}}>
+                {upload?.verified ? "✅ SCORECARD VERIFIED" : upload?.url ? "⏳ AWAITING VERIFICATION" : "📸 SUBMIT SCORECARD"}
+              </div>
+
+              {!upload?.url ? (
+                <>
+                  <div style={{fontSize:13,color:"var(--text3)",marginBottom:12,lineHeight:1.6}}>
+                    Take a photo of your physical scorecard and upload it to finalize your round.
+                    {!allFilled && <span style={{color:"var(--amber)"}}> Complete at least 9 holes first.</span>}
+                  </div>
+                  <label style={{display:"inline-block",cursor:allFilled?"pointer":"not-allowed",opacity:allFilled?1:0.4}}>
+                    <div className="btn-gold" style={{fontSize:12,display:"inline-block",pointerEvents:allFilled?"auto":"none"}}>
+                      {uploading ? "UPLOADING…" : "📷 UPLOAD SCORECARD PHOTO"}
+                    </div>
+                    <input type="file" accept="image/*" capture="environment"
+                      style={{display:"none"}} disabled={!allFilled||uploading}
+                      onChange={handleUpload}/>
+                  </label>
+                  {uploadErr && <div style={{color:"var(--red)",fontSize:12,marginTop:8}}>{uploadErr}</div>}
+                </>
+              ) : upload?.verified ? (
+                <div style={{fontSize:13,color:"var(--green)",lineHeight:1.6}}>
+                  Your scorecard has been verified by the commissioner. Your round is official. ✓
+                </div>
+              ) : (
+                <div>
+                  <div style={{fontSize:13,color:"var(--text2)",marginBottom:10}}>
+                    Scorecard uploaded on {upload.uploadedAt}. The commissioner will verify it shortly.
+                  </div>
+                  <img src={upload.url} alt="Uploaded scorecard" style={{width:"100%",maxWidth:320,borderRadius:4,border:"1px solid var(--border)"}}/>
+                  <div style={{marginTop:10}}>
+                    <label style={{cursor:"pointer"}}>
+                      <span style={{fontSize:11,color:"var(--text3)",textDecoration:"underline"}}>Upload a different photo</span>
+                      <input type="file" accept="image/*" capture="environment" style={{display:"none"}} onChange={handleUpload}/>
+                    </label>
+                  </div>
+                </div>
+              )}
+            </div>
+          );
+        })()}
+
+        {/* Sidebets */}
+        <div style={{marginTop:20}}>
+          <div style={{fontFamily:"'Bebas Neue'",fontSize:10,letterSpacing:3,color:"var(--green)",marginBottom:10}}>── SIDEBETS</div>
+          <Sidebets myPlayer={player} players={players} pars={pars}/>
+        </div>
+
         <div style={{textAlign:"center",marginTop:14}}>
           <span style={{fontSize:12,color:"var(--text3)",cursor:"pointer"}} onClick={()=>setScreen("leaderboard")}>← Back to Leaderboard</span>
         </div>
@@ -1116,6 +1238,7 @@ export default function App() {
           savePlayer={savePlayer} removePlayerDb={removePlayerDb}
           saveCourse={saveCourse} setCourse={setCourse}
           updateField={updateField} notify={notify}
+          scorecardUploads={scorecardUploads}
         />}
       </div>
     </div>

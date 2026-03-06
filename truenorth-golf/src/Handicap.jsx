@@ -299,7 +299,7 @@ export default function HandicapTracker({ players, adminUnlocked, onHandicapUpda
 
                   {/* Actions */}
                   <div style={{display:"flex",gap:8,flexWrap:"wrap"}}>
-                    {(adminUnlocked || true) && (
+                    {adminUnlocked && (
                       <button className="btn-gold" style={{fontSize:12}} onClick={()=>setAddingRound(player.id)}>+ ADD ROUND</button>
                     )}
                     {adminUnlocked && (

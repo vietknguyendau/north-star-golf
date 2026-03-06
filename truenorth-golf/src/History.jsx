@@ -226,7 +226,7 @@ export default function TournamentHistory({ players }) {
                   </span>
                   <div>
                     <div style={{fontSize:16,fontWeight:600,color:"var(--text2)"}}>{p.name}</div>
-                    <div style={{fontSize:11,color:"var(--text3)",letterSpacing:1}}>{p.flight} · HCP {p.handicap}</div>
+                    <div style={{fontSize:11,color:"var(--text3)",letterSpacing:1}}>HCP {p.handicap}</div>
                   </div>
                   <div style={{textAlign:"center",fontFamily:"'DM Mono'",fontSize:15,color:"var(--text2)"}}>{p.gross||"—"}</div>
                   <div style={{textAlign:"center",fontFamily:"'DM Mono'",fontSize:15,fontWeight:700,color:idx===0?"var(--gold)":"var(--text)"}}>{p.net||"—"}</div>
@@ -303,7 +303,7 @@ export default function TournamentHistory({ players }) {
                     <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:16,flexWrap:"wrap",gap:8}}>
                       <div>
                         <div style={{fontFamily:"'Bebas Neue'",fontSize:20,letterSpacing:2,color:"var(--text)"}}>{p.name}</div>
-                        <div style={{fontSize:12,color:"var(--text3)"}}>{p.flight} · HCP {p.handicap}</div>
+                        <div style={{fontSize:12,color:"var(--text3)"}}>HCP {p.handicap}</div>
                       </div>
                       <div style={{display:"flex",gap:20}}>
                         {[["GROSS",totalGross,"+"+((totalGross-totalPar)>=0?(totalGross-totalPar):totalGross-totalPar)],
@@ -347,7 +347,7 @@ export default function TournamentHistory({ players }) {
                   </span>
                   <div>
                     <div style={{fontSize:16,fontWeight:600,color:"var(--text2)"}}>{p.name}</div>
-                    <div style={{fontSize:11,color:"var(--text3)"}}>{p.flight}</div>
+                    <div style={{fontSize:11,color:"var(--text3)"}}></div>
                   </div>
                   <div style={{textAlign:"center",fontFamily:"'DM Mono'",fontSize:14,color:"var(--text3)"}}>{getBasePoints(p.place)}</div>
                   <div style={{textAlign:"center"}}>
