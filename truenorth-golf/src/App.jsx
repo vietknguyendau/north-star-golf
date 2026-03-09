@@ -1144,12 +1144,6 @@ export default function App() {
           );
         })()}
 
-        {/* Sidebets */}
-        <div style={{marginTop:20}}>
-          <div style={{fontFamily:"'Bebas Neue'",fontSize:10,letterSpacing:3,color:"var(--green)",marginBottom:10}}>── SIDEBETS</div>
-          <Sidebets myPlayer={player} players={players} pars={pars}/>
-        </div>
-
         <div style={{textAlign:"center",marginTop:14}}>
           <span style={{fontSize:12,color:"var(--text3)",cursor:"pointer"}} onClick={()=>setScreen("leaderboard")}>← Back to Leaderboard</span>
         </div>
@@ -1161,11 +1155,93 @@ export default function App() {
   // ADMIN
 
   // ══════════════════════════════════════════════════════════════════════════
+  // SIDEBETS LOGIN
+  const SidebetsLogin = () => {
+    const [sbPid, setSbPid]       = React.useState("");
+    const [sbPin, setSbPin]       = React.useState("");
+    const [sbErr, setSbErr]       = React.useState("");
+    const [sbStep, setSbStep]     = React.useState("pick"); // pick | pin
+
+    const sbPlayer = players.find(p=>p.id===sbPid);
+
+    const verifySbPin = () => {
+      if (!sbPlayer) return;
+      const hash = sbPin.split("").reduce((a,c)=>((a<<5)-a)+c.charCodeAt(0)|0, 0).toString(16);
+      if (hash === sbPlayer.pinHash) {
+        setActivePlayer(sbPid);
+        setSbErr("");
+      } else {
+        setSbErr("Incorrect PIN. Try again.");
+        setSbPin("");
+      }
+    };
+
+    return (
+      <div style={{maxWidth:420,margin:"0 auto"}} className="fade-up">
+        <div style={{textAlign:"center",marginBottom:24}}>
+          <div style={{fontFamily:"'Bebas Neue'",fontSize:10,letterSpacing:4,color:"var(--green)",marginBottom:4}}>PRIVATE</div>
+          <div style={{fontFamily:"'Bebas Neue'",fontSize:28,letterSpacing:2}}>SIDEBETS</div>
+          <div style={{fontSize:13,color:"var(--text3)",marginTop:6}}>Log in to view and create sidebets</div>
+        </div>
+
+        {sbStep === "pick" && (
+          <div className="card" style={{padding:20}}>
+            <div className="section-label" style={{marginBottom:12}}>SELECT YOUR NAME</div>
+            <div style={{display:"flex",flexDirection:"column",gap:6,maxHeight:320,overflowY:"auto"}}>
+              {players.map(p=>(
+                <button key={p.id}
+                  className={`flight-chip ${sbPid===p.id?"active":""}`}
+                  style={{textAlign:"left",padding:"12px 16px",fontSize:14,justifyContent:"space-between",display:"flex",alignItems:"center"}}
+                  onClick={()=>setSbPid(p.id)}>
+                  <span>{p.name}</span>
+                  <span style={{fontSize:11,color:"var(--text3)"}}>HCP {p.handicap}</span>
+                </button>
+              ))}
+            </div>
+            <button className="btn-gold" style={{width:"100%",marginTop:14,fontSize:13}}
+              disabled={!sbPid} onClick={()=>setSbStep("pin")}>
+              CONTINUE →
+            </button>
+          </div>
+        )}
+
+        {sbStep === "pin" && (
+          <div className="card" style={{padding:24,textAlign:"center"}}>
+            <div style={{fontFamily:"'Bebas Neue'",fontSize:22,letterSpacing:2,marginBottom:4}}>{sbPlayer?.name}</div>
+            <div style={{fontSize:13,color:"var(--text3)",marginBottom:20}}>Enter your PIN to access sidebets</div>
+            <div style={{display:"flex",justifyContent:"center",gap:10,marginBottom:16}}>
+              {[0,1,2,3].map(i=>(
+                <div key={i} style={{width:44,height:52,background:"var(--bg3)",border:"1px solid var(--border2)",borderRadius:4,display:"flex",alignItems:"center",justifyContent:"center",fontSize:22,fontFamily:"'DM Mono'",color:"var(--gold)"}}>
+                  {sbPin[i]?"●":""}
+                </div>
+              ))}
+            </div>
+            <div style={{display:"grid",gridTemplateColumns:"repeat(3,1fr)",gap:8,maxWidth:220,margin:"0 auto 16px"}}>
+              {[1,2,3,4,5,6,7,8,9,"←",0,"→"].map((k,i)=>(
+                <button key={i} style={{padding:"14px 0",fontFamily:"'DM Mono'",fontSize:18,background:"var(--bg3)",border:"1px solid var(--border2)",borderRadius:4,color:"var(--text)",cursor:"pointer"}}
+                  onClick={()=>{
+                    if(k==="←") setSbPin(p=>p.slice(0,-1));
+                    else if(k==="→") verifySbPin();
+                    else if(sbPin.length<4) setSbPin(p=>p+k);
+                  }}>
+                  {k}
+                </button>
+              ))}
+            </div>
+            {sbErr && <div style={{color:"var(--red)",fontSize:13,marginBottom:10}}>{sbErr}</div>}
+            <button className="btn-ghost" style={{fontSize:12,marginTop:4}} onClick={()=>{ setSbStep("pick"); setSbPin(""); setSbErr(""); }}>← Back</button>
+          </div>
+        )}
+      </div>
+    );
+  };
+
+  // ══════════════════════════════════════════════════════════════════════════
   // ROOT RENDER
   const NAV = [
     ["leaderboard","🏆 LEADERBOARD"],["history","📖 HISTORY"],["rules","📋 RULES"],["season","🌟 STANDINGS"],["scorecard","📋 SCORECARDS"],
     ["course","🗺 COURSE"],["register","✍ REGISTER"],
-    ["my-scores-login","✏️ MY SCORES"],["handicap","🏅 HANDICAPS"],["admin","⚙ ADMIN"],
+    ["my-scores-login","✏️ MY SCORES"],["sidebets","🤝 SIDEBETS"],["handicap","🏅 HANDICAPS"],["admin","⚙ ADMIN"],
   ];
   const activeNav = screen==="my-scores"?"my-scores-login":screen;
 
@@ -1229,6 +1305,11 @@ export default function App() {
         {screen==="my-scores"       && <MyScores/>}
         {screen==="history" && <TournamentHistory players={players} />}
         {screen==="rules" && <RulesPage adminUnlocked={adminUnlocked} />}
+        {screen==="sidebets" && (
+          activePlayer
+            ? <Sidebets myPlayer={players.find(p=>p.id===activePlayer)} players={players} pars={pars}/>
+            : <SidebetsLogin/>
+        )}
         {screen==="season" && <SeasonStandings players={players} adminUnlocked={adminUnlocked} />}
         {screen==="handicap" && <HandicapTracker players={players} adminUnlocked={adminUnlocked} onHandicapUpdate={(pid,hcp)=>setPlayers(prev=>prev.map(p=>p.id===pid?{...p,handicap:hcp}:p))} />}
         {screen==="admin" && <AdminView
