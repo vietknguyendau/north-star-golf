@@ -313,37 +313,34 @@ function AdminView({ course, players, adminUnlocked, setAdminUnlocked, pinInput,
               <button className="btn-danger" onClick={()=>removePlayerDb(p.id)}>✕ Remove</button>
             </div>
             {/* Scorecard verification panel */}
-            {(()=>{
-              const upload = scorecardUploads?.[p.id];
-              if (!upload?.url) return (
-                <div style={{padding:"6px 12px 10px",fontSize:11,color:"var(--text3)",fontStyle:"italic",borderTop:"1px solid var(--border)"}}>
-                  No scorecard uploaded yet.
-                </div>
-              );
-              return (
-                <div style={{padding:"10px 12px",borderTop:"1px solid var(--border)",display:"flex",gap:12,alignItems:"flex-start",flexWrap:"wrap",background:"var(--bg3)"}}>
-                  <img src={upload.url} alt="Scorecard" style={{width:100,height:70,objectFit:"cover",borderRadius:3,border:"1px solid var(--border2)",cursor:"pointer"}}
-                    onClick={()=>window.open(upload.url,"_blank")}/>
-                  <div style={{flex:1}}>
-                    <div style={{fontSize:11,color:"var(--text3)",marginBottom:6}}>📸 Uploaded: {upload.uploadedAt}</div>
-                    {upload.verified ? (
-                      <div style={{display:"flex",alignItems:"center",gap:8}}>
-                        <span style={{fontSize:11,color:"var(--green)",fontFamily:"'Bebas Neue'",letterSpacing:1}}>✓ VERIFIED · {upload.verifiedAt}</span>
-                        <button className="btn-ghost" style={{fontSize:10,padding:"2px 8px",color:"var(--amber)",borderColor:"var(--amber)"}}
-                          onClick={async()=>{ await setDoc(doc(db,"tournaments",TOURNAMENT_ID,"scorecard_uploads",p.id),{...upload,verified:false}); notify("Verification removed."); }}>
-                          UNVERIFY
-                        </button>
-                      </div>
-                    ) : (
-                      <button className="btn-gold" style={{fontSize:11,padding:"5px 14px"}}
-                        onClick={async()=>{ await setDoc(doc(db,"tournaments",TOURNAMENT_ID,"scorecard_uploads",p.id),{...upload,verified:true,verifiedAt:new Date().toLocaleDateString("en-US",{month:"short",day:"numeric"})}); notify(`${p.name} verified! ✓`); }}>
-                        ✓ MARK AS VERIFIED
+            {!scorecardUploads?.[p.id]?.url && (
+              <div style={{padding:"6px 12px 10px",fontSize:11,color:"var(--text3)",fontStyle:"italic",borderTop:"1px solid var(--border)"}}>
+                No scorecard uploaded yet.
+              </div>
+            )}
+            {scorecardUploads?.[p.id]?.url && (
+              <div style={{padding:"10px 12px",borderTop:"1px solid var(--border)",display:"flex",gap:12,alignItems:"flex-start",flexWrap:"wrap",background:"var(--bg3)"}}>
+                <img src={scorecardUploads[p.id].url} alt="Scorecard" style={{width:100,height:70,objectFit:"cover",borderRadius:3,border:"1px solid var(--border2)",cursor:"pointer"}}
+                  onClick={()=>window.open(scorecardUploads[p.id].url,"_blank")}/>
+                <div style={{flex:1}}>
+                  <div style={{fontSize:11,color:"var(--text3)",marginBottom:6}}>📸 Uploaded: {scorecardUploads[p.id].uploadedAt}</div>
+                  {scorecardUploads[p.id].verified ? (
+                    <div style={{display:"flex",alignItems:"center",gap:8}}>
+                      <span style={{fontSize:11,color:"var(--green)",fontFamily:"'Bebas Neue'",letterSpacing:1}}>✓ VERIFIED · {scorecardUploads[p.id].verifiedAt}</span>
+                      <button className="btn-ghost" style={{fontSize:10,padding:"2px 8px",color:"var(--amber)",borderColor:"var(--amber)"}}
+                        onClick={async()=>{ await setDoc(doc(db,"tournaments",TOURNAMENT_ID,"scorecard_uploads",p.id),{...scorecardUploads[p.id],verified:false}); notify("Verification removed."); }}>
+                        UNVERIFY
                       </button>
-                    )}
-                  </div>
+                    </div>
+                  ) : (
+                    <button className="btn-gold" style={{fontSize:11,padding:"5px 14px"}}
+                      onClick={async()=>{ await setDoc(doc(db,"tournaments",TOURNAMENT_ID,"scorecard_uploads",p.id),{...scorecardUploads[p.id],verified:true,verifiedAt:new Date().toLocaleDateString("en-US",{month:"short",day:"numeric"})}); notify(`${p.name} verified! ✓`); }}>
+                      ✓ MARK AS VERIFIED
+                    </button>
+                  )}
                 </div>
-              );
-            })()}
+              </div>
+            )}
           </div>
         ))}
           {players.length===0 && <div style={{padding:24,textAlign:"center",color:"var(--text3)",fontSize:13}}>No players yet. They'll appear here once they register.</div>}
