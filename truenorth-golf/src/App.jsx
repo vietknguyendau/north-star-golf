@@ -344,7 +344,8 @@ function AdminView({ course, players, adminUnlocked, setAdminUnlocked, pinInput,
                 </div>
               );
             })()}
-          ))}
+          </div>
+        ))}
           {players.length===0 && <div style={{padding:24,textAlign:"center",color:"var(--text3)",fontSize:13}}>No players yet. They'll appear here once they register.</div>}
         </div>
         <button className="btn-gold" style={{fontSize:13}} onClick={async()=>{
