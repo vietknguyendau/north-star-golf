@@ -408,7 +408,8 @@ export default function App() {
   // ── Firebase state ──
   const [players, setPlayers]   = useState([]);
   const [course, setCourse]     = useState(null);
-  const [scorecardUploads, setScorecardUploads] = useState({}); // { playerId: { url, verified, uploadedAt } }
+  const [scorecardUploads, setScorecardUploads] = useState({});
+  const [moreOpen, setMoreOpen] = useState(false); // { playerId: { url, verified, uploadedAt } }
   const [loading, setLoading]   = useState(true);
   const [syncStatus, setSyncStatus] = useState("synced"); // synced | syncing | error
 
@@ -1238,12 +1239,23 @@ export default function App() {
 
   // ══════════════════════════════════════════════════════════════════════════
   // ROOT RENDER
-  const NAV = [
-    ["leaderboard","🏆 LEADERBOARD"],["history","📖 HISTORY"],["rules","📋 RULES"],["season","🌟 STANDINGS"],["scorecard","📋 SCORECARDS"],
-    ["course","🗺 COURSE"],["register","✍ REGISTER"],
-    ["my-scores-login","✏️ MY SCORES"],["sidebets","🤝 SIDEBETS"],["handicap","🏅 HANDICAPS"],["admin","⚙ ADMIN"],
+  const NAV_PRIMARY = [
+    ["leaderboard","🏆 LEADERBOARD"],
+    ["my-scores-login","✏️ MY SCORES"],
+    ["sidebets","🤝 SIDEBETS"],
+    ["season","🌟 STANDINGS"],
+    ["register","✍ REGISTER"],
   ];
-  const activeNav = screen==="my-scores"?"my-scores-login":screen;
+  const NAV_MORE = [
+    ["history","📖 HISTORY"],
+    ["rules","📋 RULES"],
+    ["scorecard","📋 SCORECARDS"],
+    ["course","🗺 COURSE"],
+    ["handicap","🏅 HANDICAPS"],
+    ["admin","⚙ ADMIN"],
+  ];
+  const NAV = [...NAV_PRIMARY, ...NAV_MORE];
+  const activeNav = screen==="my-scores"?"my-scores-login":screen==="sidebets"?"sidebets":screen;
 
   return (
     <div style={{minHeight:"100vh",background:"var(--bg)",color:"var(--text)"}}>
@@ -1284,13 +1296,37 @@ export default function App() {
               <button className="btn-gold  btn-sm" onClick={()=>setScreen(activePlayer?"my-scores":"my-scores-login")}>✏️ MY SCORES</button>
             </div>
           </div>
-          <div style={{display:"flex",marginTop:12,overflowX:"auto"}}>
-            {NAV.map(([val,label])=>(
+          <div style={{display:"flex",marginTop:12,alignItems:"center",gap:0}}>
+            {NAV_PRIMARY.map(([val,label])=>(
               <div key={val} className={`nav-pill ${activeNav===val?"active":""}`}
                 onClick={()=>{ if(val==="my-scores-login"&&activePlayer)setScreen("my-scores"); else setScreen(val); }}>
                 {label}
               </div>
             ))}
+            {/* More dropdown */}
+            <div style={{position:"relative"}} onMouseLeave={()=>setMoreOpen(false)}>
+              <div className={`nav-pill ${NAV_MORE.some(([v])=>v===activeNav)?"active":""}`}
+                onClick={()=>setMoreOpen(o=>!o)}
+                style={{cursor:"pointer",userSelect:"none"}}>
+                {NAV_MORE.some(([v])=>v===activeNav)
+                  ? NAV_MORE.find(([v])=>v===activeNav)?.[1]
+                  : "⋯ MORE"}
+              </div>
+              {moreOpen && (
+                <div style={{position:"absolute",top:"100%",right:0,background:"var(--bg2)",border:"1px solid var(--border)",borderRadius:4,zIndex:100,minWidth:180,boxShadow:"0 8px 24px rgba(0,0,0,.6)"}}>
+                  {NAV_MORE.map(([val,label])=>(
+                    <div key={val}
+                      style={{padding:"11px 18px",fontSize:12,fontFamily:"'Bebas Neue'",letterSpacing:2,cursor:"pointer",
+                        color:activeNav===val?"var(--gold)":"var(--text2)",
+                        background:activeNav===val?"var(--bg3)":"transparent",
+                        borderBottom:"1px solid var(--border)"}}
+                      onClick={()=>{ setScreen(val); setMoreOpen(false); }}>
+                      {label}
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
           </div>
         </div>
       </div>
